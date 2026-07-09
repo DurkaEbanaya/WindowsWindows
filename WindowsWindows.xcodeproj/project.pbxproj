@@ -1,0 +1,492 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100001 /* AppDelegate.swift */; };
+		AA000002 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100002 /* main.swift */; };
+		AA000003 /* ObservedWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100010 /* ObservedWindow.swift */; };
+		AA000004 /* ApplicationEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100011 /* ApplicationEntry.swift */; };
+		AA000005 /* ShelfConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100012 /* ShelfConfig.swift */; };
+		AA000006 /* ConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100020 /* ConfigStore.swift */; };
+		AA000007 /* Policy.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100030 /* Policy.swift */; };
+		AA000008 /* WindowDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100040 /* WindowDiscovery.swift */; };
+		AA000009 /* WindowSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100050 /* WindowSnapshotter.swift */; };
+		AA00000A /* ProxyFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100060 /* ProxyFactory.swift */; };
+		AA00000B /* ProxyIPC.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100070 /* ProxyIPC.swift */; };
+		AA00000C /* WindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100080 /* WindowController.swift */; };
+		AA00000D /* RefreshLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100090 /* RefreshLoop.swift */; };
+		AA000110 /* DiagnosticJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110110 /* DiagnosticJournal.swift */; };
+		AA000111 /* WindowFocusTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110111 /* WindowFocusTracker.swift */; };
+		AA000100 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110000 /* main.swift */; };
+		AA000101 /* WindowsWindowsProxy binary in Copy Files */ = {isa = PBXBuildFile; fileRef = AA110100 /* WindowsWindowsProxy */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA100001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		AA100002 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		AA100010 /* ObservedWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservedWindow.swift; sourceTree = "<group>"; };
+		AA100011 /* ApplicationEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApplicationEntry.swift; sourceTree = "<group>"; };
+		AA100012 /* ShelfConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfConfig.swift; sourceTree = "<group>"; };
+		AA100020 /* ConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigStore.swift; sourceTree = "<group>"; };
+		AA100030 /* Policy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Policy.swift; sourceTree = "<group>"; };
+		AA100040 /* WindowDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDiscovery.swift; sourceTree = "<group>"; };
+		AA100050 /* WindowSnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSnapshotter.swift; sourceTree = "<group>"; };
+		AA100060 /* ProxyFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyFactory.swift; sourceTree = "<group>"; };
+		AA100070 /* ProxyIPC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProxyIPC.swift; sourceTree = "<group>"; };
+		AA100080 /* WindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowController.swift; sourceTree = "<group>"; };
+		AA100090 /* RefreshLoop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefreshLoop.swift; sourceTree = "<group>"; };
+		AA100098 /* WindowsWindows.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WindowsWindows.entitlements; sourceTree = "<group>"; };
+		AA100099 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA110110 /* DiagnosticJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticJournal.swift; sourceTree = "<group>"; };
+		AA110111 /* WindowFocusTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowFocusTracker.swift; sourceTree = "<group>"; };
+		AA100200 /* WindowsWindows.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindowsWindows.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA110000 /* main.swift (proxy) */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = WindowsWindowsProxy/main.swift; sourceTree = "<group>"; };
+		AA110100 /* WindowsWindowsProxy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WindowsWindowsProxy; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		AA200000 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				AA200001 /* WindowsWindows */,
+				AA200003 /* WindowsWindowsProxy */,
+				AA200002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA200002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA100200 /* WindowsWindows.app */,
+				AA110100 /* WindowsWindowsProxy */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AA200003 /* WindowsWindowsProxy */ = {
+			isa = PBXGroup;
+			children = (
+				AA110000 /* main.swift (proxy) */,
+			);
+			name = WindowsWindowsProxy;
+			sourceTree = "<group>";
+		};
+		AA200001 /* WindowsWindows */ = {
+			isa = PBXGroup;
+			children = (
+				AA200010 /* Sources */,
+				AA200020 /* Resources */,
+				AA100098 /* WindowsWindows.entitlements */,
+				AA100099 /* Info.plist */,
+			);
+			path = WindowsWindows;
+			sourceTree = "<group>";
+		};
+		AA200010 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				AA200011 /* AppDelegate */,
+				AA200012 /* Models */,
+				AA200013 /* Config */,
+				AA200014 /* Policy */,
+				AA200015 /* Discovery */,
+				AA200016 /* Rendering */,
+				AA200017 /* Proxy */,
+				AA200018 /* IPC */,
+				AA200019 /* WindowController */,
+				AA20001A /* RefreshLoop */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		AA200011 /* AppDelegate */ = {
+			isa = PBXGroup;
+			children = (
+				AA100002 /* main.swift */,
+				AA100001 /* AppDelegate.swift */,
+			);
+			path = AppDelegate;
+			sourceTree = "<group>";
+		};
+		AA200012 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				AA100010 /* ObservedWindow.swift */,
+				AA100011 /* ApplicationEntry.swift */,
+				AA100012 /* ShelfConfig.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		AA200013 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				AA100020 /* ConfigStore.swift */,
+				AA110110 /* DiagnosticJournal.swift */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		AA200014 /* Policy */ = {
+			isa = PBXGroup;
+			children = (
+				AA100030 /* Policy.swift */,
+			);
+			path = Policy;
+			sourceTree = "<group>";
+		};
+		AA200015 /* Discovery */ = {
+			isa = PBXGroup;
+			children = (
+				AA100040 /* WindowDiscovery.swift */,
+			);
+			path = Discovery;
+			sourceTree = "<group>";
+		};
+		AA200016 /* Rendering */ = {
+			isa = PBXGroup;
+			children = (
+				AA100050 /* WindowSnapshotter.swift */,
+			);
+			path = Rendering;
+			sourceTree = "<group>";
+		};
+		AA200017 /* Proxy */ = {
+			isa = PBXGroup;
+			children = (
+				AA100060 /* ProxyFactory.swift */,
+			);
+			path = Proxy;
+			sourceTree = "<group>";
+		};
+		AA200018 /* IPC */ = {
+			isa = PBXGroup;
+			children = (
+				AA100070 /* ProxyIPC.swift */,
+			);
+			path = IPC;
+			sourceTree = "<group>";
+		};
+		AA200019 /* WindowController */ = {
+			isa = PBXGroup;
+			children = (
+				AA100080 /* WindowController.swift */,
+				AA110111 /* WindowFocusTracker.swift */,
+			);
+			path = WindowController;
+			sourceTree = "<group>";
+		};
+		AA20001A /* RefreshLoop */ = {
+			isa = PBXGroup;
+			children = (
+				AA100090 /* RefreshLoop.swift */,
+			);
+			path = RefreshLoop;
+			sourceTree = "<group>";
+		};
+		AA200020 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA300000 /* WindowsWindows */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA400000 /* Build configuration list for PBXNativeTarget "WindowsWindows" */;
+			buildPhases = (
+				AA500000 /* Sources */,
+				AA500001 /* Resources */,
+				AA500002 /* Copy Files */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA700000 /* PBXTargetDependency */,
+			);
+			name = WindowsWindows;
+			productName = WindowsWindows;
+			productReference = AA100200 /* WindowsWindows.app */;
+			productType = "com.apple.product-type.application";
+		};
+		AA300100 /* WindowsWindowsProxy */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA400200 /* Build configuration list for PBXNativeTarget "WindowsWindowsProxy" */;
+			buildPhases = (
+				AA500100 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WindowsWindowsProxy;
+			productName = WindowsWindowsProxy;
+			productReference = AA110100 /* WindowsWindowsProxy */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		AA700000 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA300100 /* WindowsWindowsProxy */;
+			targetProxy = AA700100 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		AA700100 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA600000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA300100;
+			remoteInfo = WindowsWindowsProxy;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA500002 /* Copy Files */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 7; /* Resources */
+			files = (
+				AA000101 /* WindowsWindowsProxy binary in Copy Files */,
+			);
+			name = "Copy Files";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXProject section */
+		AA600000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = AA400100 /* Build configuration list for PBXProject "WindowsWindows" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = AA200000 /* Root */;
+			productRefGroup = AA200002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA300000 /* WindowsWindows */,
+				AA300100 /* WindowsWindowsProxy */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA500001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA500000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000002 /* main.swift in Sources */,
+				AA000001 /* AppDelegate.swift in Sources */,
+				AA000003 /* ObservedWindow.swift in Sources */,
+				AA000004 /* ApplicationEntry.swift in Sources */,
+				AA000005 /* ShelfConfig.swift in Sources */,
+				AA000006 /* ConfigStore.swift in Sources */,
+				AA000110 /* DiagnosticJournal.swift in Sources */,
+				AA000007 /* Policy.swift in Sources */,
+				AA000008 /* WindowDiscovery.swift in Sources */,
+				AA000009 /* WindowSnapshotter.swift in Sources */,
+				AA00000A /* ProxyFactory.swift in Sources */,
+				AA00000B /* ProxyIPC.swift in Sources */,
+				AA00000C /* WindowController.swift in Sources */,
+				AA000111 /* WindowFocusTracker.swift in Sources */,
+				AA00000D /* RefreshLoop.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA500100 /* Sources (proxy) */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000100 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA400010 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		AA400011 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_OPTIMIZATION_LEVEL = 3;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		AA400001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = WindowsWindows/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "-parse-as-library";
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.app";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA400002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = WindowsWindows/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_SWIFT_FLAGS = "-parse-as-library";
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.app";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA400003 /* Debug (proxy) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Manual;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-parse-as-library";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.proxy.executable";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+			};
+			name = Debug;
+		};
+		AA400004 /* Release (proxy) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Manual;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-parse-as-library";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.proxy.executable";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA400100 /* Build configuration list for PBXProject "WindowsWindows" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA400010 /* Debug */,
+				AA400011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA400000 /* Build configuration list for PBXNativeTarget "WindowsWindows" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA400001 /* Debug */,
+				AA400002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA400200 /* Build configuration list for PBXNativeTarget "WindowsWindowsProxy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA400003 /* Debug (proxy) */,
+				AA400004 /* Release (proxy) */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = AA600000 /* Project object */;
+}
