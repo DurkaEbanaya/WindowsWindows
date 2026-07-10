@@ -49,7 +49,10 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     private var ownerWatchdog: Timer?
     private var lastActivationTime: Date = .distantPast
     private var pendingActivation = false
+    private var isTerminating = false
+    private var didSendCloseRequest = false
     private static let debounceInterval: TimeInterval = 0.3
+    private static let actionUserInfoKey = "action"
 
     override init() {
         let key = Bundle.main.object(forInfoDictionaryKey: "WWWindowKey") as? String ?? ""
@@ -96,9 +99,20 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidResignActive(_ notification: Notification) {
+        guard !isTerminating else { return }
         guard pendingActivation else { return }
         pendingActivation = false
-        broadcastActivation()
+        broadcast(action: "activate")
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        isTerminating = true
+        pendingActivation = false
+        if !didSendCloseRequest, isOwnerAlive() {
+            didSendCloseRequest = true
+            broadcast(action: "close")
+        }
+        return .terminateNow
     }
 
     @objc private func previewUpdated(_ notification: Notification) {
@@ -113,10 +127,11 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.applicationIconImage = image
     }
 
-    private func broadcastActivation() {
+    private func broadcast(action: String) {
         let center = DistributedNotificationCenter.default()
         let userInfo: [String: Any] = [
-            Self.windowKeyUserInfoKey: windowKey
+            Self.windowKeyUserInfoKey: windowKey,
+            Self.actionUserInfoKey: action,
         ]
         center.postNotificationName(
             Notification.Name(Self.notificationName),
@@ -124,5 +139,9 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
             userInfo: userInfo,
             deliverImmediately: true
         )
+    }
+
+    private func isOwnerAlive() -> Bool {
+        mainPID > 0 && kill(mainPID, 0) == 0
     }
 }

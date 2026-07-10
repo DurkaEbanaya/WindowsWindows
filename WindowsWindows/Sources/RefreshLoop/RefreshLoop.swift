@@ -1,6 +1,36 @@
 import Foundation
 import Cocoa
 
+public struct CloseProxySuppressionState: Equatable, Sendable {
+    public static let defaultDuration: TimeInterval = 4.0
+
+    private var expirations: [WindowKey: Date] = [:]
+
+    public init() {}
+
+    public mutating func suppress(key: WindowKey, now: Date, duration: TimeInterval = Self.defaultDuration) {
+        expirations[key] = now.addingTimeInterval(duration)
+    }
+
+    public mutating func isSuppressed(key: WindowKey, now: Date) -> Bool {
+        guard let expiration = expirations[key] else { return false }
+        if expiration <= now {
+            expirations.removeValue(forKey: key)
+            return false
+        }
+        return true
+    }
+
+    public mutating func removeObservedKeys(_ observedKeys: Set<WindowKey>, now: Date) {
+        let keysToRemove = expirations.compactMap { key, expiration in
+            expiration <= now || !observedKeys.contains(key) ? key : nil
+        }
+        for key in keysToRemove {
+            expirations.removeValue(forKey: key)
+        }
+    }
+}
+
 /// Periodically reconciles proxy bundles with the set of real windows.
 /// All mutable reconciliation state is actor-isolated, so capture operations
 /// from adjacent timer events can never overlap.
@@ -21,6 +51,7 @@ public actor RefreshLoop {
     private var snapshotInterval: TimeInterval = 5.0
     private var lastKnownConfig: ShelfConfig?
     private var onWindowsUpdated: (@MainActor @Sendable ([WindowKey: ObservedWindow]) -> Void)?
+    private var closeSuppressions = CloseProxySuppressionState()
 
     public init(
         discovery: WindowDiscovery,
@@ -72,6 +103,10 @@ public actor RefreshLoop {
         return lastKnownWindows[key]
     }
 
+    public func suppressProxyLaunch(forCloseOf key: WindowKey) {
+        closeSuppressions.suppress(key: key, now: Date())
+    }
+
     private func beginTickIfIdle() {
         guard tickTask == nil, !isShuttingDown else { return }
         tickTask = Task { [weak self] in
@@ -97,6 +132,7 @@ public actor RefreshLoop {
         let windowMap = Dictionary(uniqueKeysWithValues: windows.map { ($0.key, $0) })
         let validKeys = Set(windowMap.keys)
         reconcileKnownWindows(with: discoverySnapshot)
+        closeSuppressions.removeObservedKeys(validKeys, now: Date())
         let captureAuthorized = await snapshotter.isCaptureAuthorized
 
         if lastCaptureAuthorization != captureAuthorized {
@@ -113,6 +149,12 @@ public actor RefreshLoop {
 
         for window in windows {
             guard !Task.isCancelled else { return }
+            if closeSuppressions.isSuppressed(key: window.key, now: Date()) {
+                DiagnosticJournal.shared.log("proxy", "launch_suppressed_for_close", fields: [
+                    "key": window.key.stringValue
+                ])
+                continue
+            }
             do {
                 let shouldSnapshot = captureAuthorized && shouldRefreshSnapshot(for: window)
                 let snapshot: NSImage?

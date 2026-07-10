@@ -62,8 +62,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
 
         // 3. Подписка на IPC-активации прокси.
-        ipc.startListening { [weak self] key in
-            self?.handleProxyActivation(key: key)
+        ipc.startListening { [weak self] message in
+            self?.handleProxyMessage(message)
         }
 
         // 3b. Обновление knownWindows из RefreshLoop.
@@ -132,6 +132,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func handleProxyMessage(_ message: ProxyIPCMessage) {
+        switch message.action {
+        case .activate:
+            handleProxyActivation(key: message.windowKey)
+        case .close:
+            handleProxyCloseRequest(key: message.windowKey)
+        }
+    }
+
     /// Обработка клика по прокси в Dock.
     /// Прокси прислал windowKey → находим окно в knownWindows → toggle.
     private func handleProxyActivation(key: WindowKey) {
@@ -169,5 +178,63 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             window: window,
             wasFocusedBeforeProxy: wasFocusedBeforeProxy
         )
+    }
+
+    /// Обработка Dock → Quit/Завершить на proxy tile.
+    /// Это запрос закрыть конкретное реальное окно, а не завершить proxy app.
+    private func handleProxyCloseRequest(key: WindowKey) {
+        DiagnosticJournal.shared.log("ipc", "proxy_close_requested", fields: [
+            "key": key.stringValue
+        ])
+
+        knownWindowsLock.lock()
+        let cachedWindow = knownWindows[key]
+        knownWindowsLock.unlock()
+
+        if let cachedWindow {
+            closeWindowAndSuppressProxy(cachedWindow)
+            return
+        }
+
+        let loop = refreshLoop!
+        Task { [weak self] in
+            guard let self else { return }
+            if let found = await loop.resolveWindow(key: key) {
+                await MainActor.run {
+                    self.closeWindowAndSuppressProxy(found)
+                }
+            } else {
+                DiagnosticJournal.shared.log("ipc", "window_not_found_for_close", fields: [
+                    "key": key.stringValue
+                ])
+            }
+        }
+    }
+
+    private func closeWindowAndSuppressProxy(_ window: ObservedWindow) {
+        Task { [weak self] in
+            guard let self else { return }
+            await self.refreshLoop.suppressProxyLaunch(forCloseOf: window.key)
+            await MainActor.run {
+                self.removeProxyAndCloseWindow(window)
+            }
+        }
+    }
+
+    private func removeProxyAndCloseWindow(_ window: ObservedWindow) {
+        do {
+            try factory.remove(windowKey: window.key)
+        } catch {
+            DiagnosticJournal.shared.log("proxy", "remove_for_close_failed", fields: [
+                "key": window.key.stringValue,
+                "error": error.localizedDescription
+            ])
+        }
+
+        let result = windowController.close(window: window)
+        DiagnosticJournal.shared.log("window_control", "close_requested", fields: [
+            "key": window.key.stringValue,
+            "result": result.rawValue
+        ])
     }
 }

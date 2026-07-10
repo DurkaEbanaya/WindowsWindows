@@ -10,6 +10,12 @@ import ApplicationServices
 /// - Окно не в фокусе, но видимо → фокус + raise.
 /// - Окно скрыто (app hidden) → unhide app + фокус.
 public final class WindowController {
+    public enum CloseResult: String, Sendable {
+        case pressedCloseButton
+        case missingAXHandle
+        case missingCloseButton
+        case pressFailed
+    }
 
     /// Дебаунс: один windowKey не чаще чем раз в N мс,
     /// иначе двойные срабатывания (Dock может слать несколько активаций).
@@ -92,6 +98,44 @@ public final class WindowController {
             _ = setMinimized(false, on: ax)
         }
         raiseAndActivate(window: window, ax: ax)
+    }
+
+    /// Close exactly the represented AX window.
+    ///
+    /// This intentionally does not synthesize Cmd-W: keyboard shortcuts are
+    /// routed through the current foreground/key window and can close the wrong
+    /// target after focus changes. The AX close button is a child/control of the
+    /// concrete window handle discovered for this proxy tile.
+    @discardableResult
+    public func close(window: ObservedWindow) -> CloseResult {
+        guard let ax = window.axWindow else {
+            DiagnosticJournal.shared.log("window_control", "close_missing_ax", fields: [
+                "key": window.key.stringValue
+            ])
+            return .missingAXHandle
+        }
+
+        var closeButtonRef: CFTypeRef?
+        let readButton = AXUIElementCopyAttributeValue(
+            ax,
+            kAXCloseButtonAttribute as CFString,
+            &closeButtonRef
+        )
+        guard readButton == .success,
+              let closeButton = closeButtonRef as! AXUIElement? else {
+            DiagnosticJournal.shared.log("window_control", "close_button_missing", fields: [
+                "key": window.key.stringValue,
+                "axError": readButton.rawValue
+            ])
+            return .missingCloseButton
+        }
+
+        let press = AXUIElementPerformAction(closeButton, kAXPressAction as CFString)
+        DiagnosticJournal.shared.log("window_control", "close_button_press", fields: [
+            "key": window.key.stringValue,
+            "axError": press.rawValue
+        ])
+        return press == .success ? .pressedCloseButton : .pressFailed
     }
 
     // MARK: - Internal

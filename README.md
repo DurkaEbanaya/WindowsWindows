@@ -1,6 +1,6 @@
 # WindowsWindows
 
-WindowsWindows gives each open macOS window its own live Dock tile. Each tile uses a snapshot of the window, follows the window's lifecycle, uses a readable `Application — Window title` name, and brings that exact window to the front when clicked.
+WindowsWindows gives each open macOS window its own live Dock tile. Each tile uses a snapshot of the window, follows the window's lifecycle, uses a readable `Application — Window title` name, and controls that exact window.
 
 The app runs in the background and includes a terminal settings interface. Its configuration remains a transparent JSON file.
 
@@ -94,7 +94,7 @@ Generated per-window proxy bundles are stored under `~/Library/Application Suppo
 
 ## How it works
 
-WindowsWindows combines macOS Accessibility APIs, Core Graphics window metadata, and ScreenCaptureKit. For every discovered window, it creates a lightweight proxy app bundle whose Dock icon is the current window preview. Clicking that proxy sends an activation message back to the main app, which raises the corresponding real window.
+WindowsWindows combines macOS Accessibility APIs, Core Graphics window metadata, and ScreenCaptureKit. For every discovered window, it creates a lightweight proxy app bundle whose Dock icon is the current window preview. Clicking a proxy raises its real window, or minimizes it when that window was already focused. Choosing **Quit** for a proxy tile in the Dock closes that exact real window through its Accessibility close control instead of merely terminating and recreating the proxy.
 
 ## Limitations
 

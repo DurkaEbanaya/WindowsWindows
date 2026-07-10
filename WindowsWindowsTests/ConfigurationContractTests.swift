@@ -155,4 +155,46 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertEqual(removed.first?.lastPathComponent, malformedBundle.lastPathComponent)
         XCTAssertFalse(FileManager.default.fileExists(atPath: malformedBundle.path))
     }
+
+    func testProxyIPCParsesLegacyActivationWithoutAction() throws {
+        let key = WindowKey(appPID: 123, windowNumber: 456)
+
+        let message = try XCTUnwrap(ProxyIPCMessage(userInfo: [
+            ProxyIPC.windowKeyUserInfoKey: key.stringValue
+        ]))
+
+        XCTAssertEqual(message, ProxyIPCMessage(action: .activate, windowKey: key))
+    }
+
+    func testProxyIPCParsesExplicitCloseActionAndRejectsUnknownActions() throws {
+        let key = WindowKey(appPID: 123, windowNumber: 456)
+
+        let message = try XCTUnwrap(ProxyIPCMessage(userInfo: [
+            ProxyIPC.windowKeyUserInfoKey: key.stringValue,
+            ProxyIPC.actionUserInfoKey: ProxyIPCAction.close.rawValue,
+        ]))
+
+        XCTAssertEqual(message, ProxyIPCMessage(action: .close, windowKey: key))
+        XCTAssertNil(ProxyIPCMessage(userInfo: [
+            ProxyIPC.windowKeyUserInfoKey: key.stringValue,
+            ProxyIPC.actionUserInfoKey: "delete-everything",
+        ]))
+    }
+
+    func testCloseProxySuppressionIsBoundedAndClearsWhenWindowDisappears() {
+        let key = WindowKey(appPID: 123, windowNumber: 456)
+        let other = WindowKey(appPID: 123, windowNumber: 789)
+        let now = Date(timeIntervalSince1970: 1_000)
+        var suppressions = CloseProxySuppressionState()
+
+        suppressions.suppress(key: key, now: now, duration: 2)
+
+        XCTAssertTrue(suppressions.isSuppressed(key: key, now: now.addingTimeInterval(1)))
+        XCTAssertFalse(suppressions.isSuppressed(key: other, now: now.addingTimeInterval(1)))
+        suppressions.removeObservedKeys([], now: now.addingTimeInterval(1))
+        XCTAssertFalse(suppressions.isSuppressed(key: key, now: now.addingTimeInterval(1)))
+
+        suppressions.suppress(key: key, now: now, duration: 2)
+        XCTAssertFalse(suppressions.isSuppressed(key: key, now: now.addingTimeInterval(3)))
+    }
 }
