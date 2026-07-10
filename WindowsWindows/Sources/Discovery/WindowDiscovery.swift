@@ -11,7 +11,7 @@ import Darwin
 /// an AXUIElement directly to its CGWindowID. We resolve it dynamically and
 /// fail closed if it disappears on a future macOS release: an unmatched AX
 /// window is never attached to a proxy for a different window.
-public final class AXWindowIDResolver {
+public final class AXWindowIDResolver: @unchecked Sendable {
     public static let shared = AXWindowIDResolver()
 
     private typealias Function = @convention(c) (
@@ -49,7 +49,8 @@ public final class AXWindowIDResolver {
 /// used only to enrich the exact identity with WindowServer title and bounds.
 /// There is no title/frame matching and therefore no ambiguity when multiple
 /// windows share the same geometry or title.
-public final class WindowDiscovery {
+/// Mutable discovery history is confined to the owning `RefreshLoop` actor.
+public final class WindowDiscovery: @unchecked Sendable {
     private let resolver: AXWindowIDResolver
     private var loggedState: [WindowKey: String] = [:]
 

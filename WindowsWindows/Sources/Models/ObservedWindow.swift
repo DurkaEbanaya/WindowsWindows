@@ -6,7 +6,10 @@ import ApplicationServices
 /// Identity: `(appPID, windowNumber)` — стабильно на времени жизни окна.
 /// `axWindow` хранится отдельно и может пересоздаваться при refresh.
 /// `title` и `bounds` — display-only, не входят в identity.
-public struct ObservedWindow: Hashable, Identifiable {
+// AXUIElement is an immutable CoreFoundation handle. The referenced remote UI
+// object may change, but the handle itself can be passed between executor
+// domains and all access still goes through thread-safe AX functions.
+public struct ObservedWindow: Hashable, Identifiable, @unchecked Sendable {
     public let appPID: pid_t
     public let windowNumber: CGWindowID
     public var bundleIdentifier: String
@@ -54,7 +57,7 @@ public struct ObservedWindow: Hashable, Identifiable {
 }
 
 /// Стабильный идентификатор окна, используемый в IPC и в именах proxy-бандлов.
-public struct WindowKey: Hashable, Codable {
+public struct WindowKey: Hashable, Codable, Sendable {
     public let appPID: pid_t
     public let windowNumber: CGWindowID
 

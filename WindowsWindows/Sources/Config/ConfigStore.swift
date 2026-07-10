@@ -8,7 +8,9 @@ import Foundation
 ///   config.json
 ///   ProxyApps/                 <- генерируемые прокси-бандлы
 /// ```
-public final class ConfigStore {
+/// Instances are owned by `RefreshLoop` after startup. JSONEncoder/Decoder and
+/// file access therefore remain confined to that actor.
+public final class ConfigStore: @unchecked Sendable {
     public static let appName = "WindowsWindows"
     public static let proxyAppsDirName = "ProxyApps"
 

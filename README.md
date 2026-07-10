@@ -29,7 +29,7 @@ xcodebuild \
 open .build/Build/Products/Release/WindowsWindows.app
 ```
 
-The first launch asks for Accessibility access. macOS asks for Screen Recording access when WindowsWindows first captures a preview. Grant both in **System Settings > Privacy & Security**, then restart the app if macOS requests it.
+The first launch asks for Accessibility access and requests Screen Recording access. On macOS 26, if the system opens **System Settings > Privacy & Security > Screen & System Audio Recording** without adding the app, use `+` to add the installed `WindowsWindows.app`, enable it, and restart the app.
 
 The scheme's post-build action signs embedded executables and the app bundle. It uses an ad-hoc signature by default when the repository author's local identity is unavailable. To use a stable Apple Development or self-signed identity, pass its SHA-1 hash in the environment:
 
@@ -69,7 +69,7 @@ Default configuration:
 - `refreshInterval` controls window discovery, in seconds.
 - `snapshotInterval` controls preview refreshes, in seconds.
 
-Quit and reopen WindowsWindows after editing the file. Apple system processes, WindowsWindows itself, and generated proxy apps are always excluded.
+Quit and reopen WindowsWindows after editing the file. Apple system processes, CleanShot X capture overlays, WindowsWindows itself, and generated proxy apps are always excluded.
 
 Diagnostics are appended to:
 

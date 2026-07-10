@@ -5,51 +5,64 @@ import CoreGraphics
 
 /// Снятие снапшотов окон через ScreenCaptureKit.
 ///
-/// Требует **Screen Recording permission** (TCC). Без него captureImage
-/// вернёт ошибку `-3801`. Permission запрашивается системой автоматически
-/// при первом вызове SCShareableContent / captureImage.
+/// Требует **Screen Recording permission** (TCC). На macOS 26 приложение
+/// должно явно вызвать `CGRequestScreenCaptureAccess`; если система не может
+/// показать prompt, пользователь добавляет bundle в Privacy & Security.
 ///
 /// Архитектура:
-/// - `capture(window:)` — делает один снапшот окна по windowID.
-/// - `NSImage` кэшируется на короткое время (snapshotInterval из конфига),
-///   чтобы не дёргать SCK на каждом refresh.
+/// - `capture(windowID:)` — делает один снапшот окна по windowID.
 /// - `SCShareableContent` пере-запрашивается раз в N секунд (он дорогой).
-public final class WindowSnapshotter {
+/// Actor isolation сериализует доступ к кэшу ScreenCaptureKit content.
+public actor WindowSnapshotter {
 
     /// Размер превью (ширина × высота). Dock tile ≈ 64pt, берём с запасом
     /// для retina (×2). Пропорции сохраняются.
-    public static let previewWidth = 128
-    public static let previewHeight = 96
+    public static let maximumPreviewDimension = 512
 
     /// Интервал обновления SCShareableContent (дорогой вызов).
     private static let contentRefreshInterval: TimeInterval = 5.0
 
     private var content: SCShareableContent?
     private var contentFetchedAt: Date = .distantPast
-    private let cache = NSCache<NSNumber, NSImage>()
-    private let queue = DispatchQueue(label: "com.windowswindows.snapshotter", qos: .utility)
+    public init() {}
 
-    public init() {
-        cache.countLimit = 100
+    public var isCaptureAuthorized: Bool {
+        CGPreflightScreenCaptureAccess()
+    }
+
+    public enum CaptureError: LocalizedError {
+        case contentUnavailable(String)
+        case windowUnavailable(CGWindowID)
+        case screenshotFailed(String)
+
+        public var errorDescription: String? {
+            switch self {
+            case .contentUnavailable(let message):
+                return "ScreenCaptureKit content unavailable: \(message)"
+            case .windowUnavailable(let id):
+                return "Window \(id) is absent from ScreenCaptureKit content"
+            case .screenshotFailed(let message):
+                return "Window screenshot failed: \(message)"
+            }
+        }
     }
 
     /// Сделать снапшот окна. Асинхронный — SCK не имеет sync API.
     ///
     /// - Parameter windowID: CGWindowID целевого окна.
-    /// - Returns: NSImage превью или nil (нет permission / окно исчезло / ошибка).
-    public func capture(windowID: CGWindowID) async -> NSImage? {
-        // Кэш: если свежий — вернуть.
-        if let cached = cache.object(forKey: NSNumber(value: windowID)) {
-            return cached
+    /// - Returns: NSImage превью.
+    /// - Throws: typed capture error when content or the target is unavailable.
+    public func capture(windowID: CGWindowID) async throws -> NSImage {
+        let content = try await getFreshContent()
+        guard let target = findWindow(id: windowID, in: content) else {
+            throw CaptureError.windowUnavailable(windowID)
         }
-
-        guard let content = await getFreshContent() else { return nil }
-        guard let target = findWindow(id: windowID, in: content) else { return nil }
 
         let filter = SCContentFilter(desktopIndependentWindow: target)
         let config = SCStreamConfiguration()
-        config.width = Self.previewWidth
-        config.height = Self.previewHeight
+        let size = previewSize(for: target.frame.size)
+        config.width = size.width
+        config.height = size.height
         config.showsCursor = false
         config.captureResolution = .best
 
@@ -58,32 +71,15 @@ public final class WindowSnapshotter {
                 contentFilter: filter,
                 configuration: config
             )
-            let image = NSImage(cgImage: cgImage, size: NSSize(
-                width: Self.previewWidth,
-                height: Self.previewHeight
-            ))
-            cache.setObject(image, forKey: NSNumber(value: windowID))
-            return image
+            return NSImage(cgImage: cgImage, size: NSSize(width: size.width, height: size.height))
         } catch {
-            // -3801 = no permission; другие = окно исчезло/недоступно.
-            return nil
+            throw CaptureError.screenshotFailed(error.localizedDescription)
         }
-    }
-
-    /// Сбросить кэш для конкретного окна (например, при смене title —
-    /// превью могло измениться).
-    public func invalidate(windowID: CGWindowID) {
-        cache.removeObject(forKey: NSNumber(value: windowID))
-    }
-
-    /// Сбросить весь кэш.
-    public func invalidateAll() {
-        cache.removeAllObjects()
     }
 
     // MARK: - Internal
 
-    private func getFreshContent() async -> SCShareableContent? {
+    private func getFreshContent() async throws -> SCShareableContent {
         let now = Date()
         if let content = content, now.timeIntervalSince(contentFetchedAt) < Self.contentRefreshInterval {
             return content
@@ -97,11 +93,25 @@ public final class WindowSnapshotter {
             self.contentFetchedAt = now
             return c
         } catch {
-            return nil
+            throw CaptureError.contentUnavailable(error.localizedDescription)
         }
     }
 
     private func findWindow(id: CGWindowID, in content: SCShareableContent) -> SCWindow? {
         content.windows.first(where: { $0.windowID == id })
+    }
+
+    private func previewSize(for source: CGSize) -> (width: Int, height: Int) {
+        guard source.width > 0, source.height > 0 else {
+            return (Self.maximumPreviewDimension, Self.maximumPreviewDimension)
+        }
+        let scale = min(
+            CGFloat(Self.maximumPreviewDimension) / source.width,
+            CGFloat(Self.maximumPreviewDimension) / source.height
+        )
+        return (
+            max(1, Int((source.width * scale).rounded())),
+            max(1, Int((source.height * scale).rounded()))
+        )
     }
 }

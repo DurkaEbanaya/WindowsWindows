@@ -9,7 +9,7 @@ import Cocoa
 ///   Contents/
 ///     Info.plist          <- CFBundleIdentifier=com.windowswindows.proxy.<key>
 ///     MacOS/WindowsWindowsProxy   <- исполняемый файл
-///     Resources/icon.icns <- превью окна (снапшот)
+///     Resources/preview.png <- превью окна (снапшот)
 /// ```
 ///
 /// Контракт: tile появляется в Dock **только когда прокси-процесс running**.
@@ -20,11 +20,14 @@ import Cocoa
 /// - `ensure(window:)` — создать/обновить бандл + запустить прокси если не running.
 /// - `remove(windowKey:)` — terminate прокси-процесс + удалить бандл.
 /// - `cleanup(validKeys:)` — удалить все прокси, чьи ключи не в списке.
-public final class ProxyFactory {
+/// Bundle mutation is confined to `RefreshLoop`; completion-handler access to
+/// process ownership is protected by `lock`.
+public final class ProxyFactory: @unchecked Sendable {
 
     public static let proxyBundlePrefix = Policy.proxyBundlePrefix
     public static let proxyExecutableName = "WindowsWindowsProxy"
-    public static let iconFileName = "icon.icns"
+    public static let previewFileName = "preview.png"
+    private static let previewUpdatedNotificationName = "com.windowswindows.proxy.preview-updated"
 
     private let proxyAppsURL: URL
     private let proxyBinaryURL: URL
@@ -34,6 +37,9 @@ public final class ProxyFactory {
     /// Key = WindowKey.stringValue (для IPC-имён).
     private var runningProxies: [String: NSRunningApplication] = [:]
     private var desiredProxyKeys: Set<String> = []
+    private var upgradingProxyKeys: Set<String> = []
+    private var launchingProxyKeys: Set<String> = []
+    private var isShuttingDown = false
     private let lock = NSLock()
 
     public init(proxyAppsURL: URL, proxyBinaryURL: URL) {
@@ -49,6 +55,12 @@ public final class ProxyFactory {
     @discardableResult
     public func ensure(window: ObservedWindow, snapshot: NSImage?) throws -> URL {
         lock.lock()
+        guard !isShuttingDown else {
+            lock.unlock()
+            throw NSError(domain: "ProxyFactory", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "Proxy factory is shutting down"
+            ])
+        }
         desiredProxyKeys.insert(window.key.stringValue)
         lock.unlock()
 
@@ -66,7 +78,10 @@ public final class ProxyFactory {
 
         // 1. Скопировать/обновить исполняемый файл.
         let execURL = macosURL.appendingPathComponent(Self.proxyExecutableName)
-        try copyBinary(from: proxyBinaryURL, to: execURL)
+        let binaryChanged = try copyBinary(from: proxyBinaryURL, to: execURL)
+        if binaryChanged {
+            beginProxyUpgrade(key: window.key.stringValue)
+        }
 
         // 2. Записать Info.plist.
         let infoPlistURL = contentsURL.appendingPathComponent("Info.plist")
@@ -75,8 +90,9 @@ public final class ProxyFactory {
 
         // 3. Иконка-снапшот (если есть).
         if let snapshot = snapshot {
-            let iconURL = resourcesURL.appendingPathComponent(Self.iconFileName)
+            let iconURL = resourcesURL.appendingPathComponent(Self.previewFileName)
             try writeIcon(from: snapshot, to: iconURL)
+            notifyPreviewUpdated(key: window.key.stringValue)
         }
 
         // 4. Регистрация в LaunchServices.
@@ -91,7 +107,7 @@ public final class ProxyFactory {
     /// Удалить прокси для конкретного окна: terminate процесса + удалить бандл.
     public func remove(windowKey: WindowKey) throws {
         let keyStr = windowKey.stringValue
-        terminateProxy(key: keyStr)
+        guard terminateProxy(key: keyStr) else { return }
         let bundleURL = proxyAppsURL.appendingPathComponent("\(keyStr).app", isDirectory: true)
         try removeBundle(at: bundleURL)
     }
@@ -110,9 +126,10 @@ public final class ProxyFactory {
                 continue
             }
             if !validKeys.contains(key) {
-                terminateProxy(key: key.stringValue)
-                try? removeBundle(at: entry)
-                removed.append(key)
+                if terminateProxy(key: key.stringValue) {
+                    try? removeBundle(at: entry)
+                    removed.append(key)
+                }
             }
         }
         return removed
@@ -130,15 +147,26 @@ public final class ProxyFactory {
         }
     }
 
-    /// Завершить все running прокси (при завершении main app).
-    public func terminateAll() {
+    /// Permanently stop this factory and terminate every generated proxy.
+    /// Once shutdown starts, neither an active refresh nor an asynchronous
+    /// LaunchServices completion can make a proxy desired again.
+    public func shutdown() {
         lock.lock()
+        isShuttingDown = true
         let proxies = runningProxies
         runningProxies.removeAll()
         desiredProxyKeys.removeAll()
+        upgradingProxyKeys.removeAll()
+        launchingProxyKeys.removeAll()
         lock.unlock()
+
         for (_, app) in proxies {
             app.terminate()
+        }
+        for key in existingProxyKeys() {
+            let bundleIdentifier = Self.proxyBundlePrefix + key.stringValue
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+                .forEach { $0.terminate() }
         }
     }
 
@@ -146,7 +174,8 @@ public final class ProxyFactory {
 
     private func buildInfoPlist(window: ObservedWindow) throws -> Data {
         let bid = Self.proxyBundlePrefix + window.key.stringValue
-        let displayName = window.title.isEmpty ? window.appName : "\(window.appName) — \(window.title)"
+        let title = window.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = title.isEmpty ? window.appName : title
 
         guard let bundleVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
               let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else {
@@ -163,7 +192,7 @@ public final class ProxyFactory {
             "CFBundleVersion": bundleVersion,
             "CFBundleShortVersionString": shortVersion,
             "CFBundlePackageType": "APPL",
-            "CFBundleIconFile": Self.iconFileName,
+            "CFBundleIconFile": Self.previewFileName,
             "LSMinimumSystemVersion": "14.0",
             // Foreground app (без LSUIElement) — Dock показывает tile для running.
             // setActivationPolicy(.accessory) в runtime убирает menu bar / cmd-tab,
@@ -175,32 +204,42 @@ public final class ProxyFactory {
             "WWWindowNumber": Int(window.windowNumber),
             "WWAppName": window.appName,
             "WWTitle": window.title,
+            "WWMainPID": Int(ProcessInfo.processInfo.processIdentifier),
         ]
         return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
     }
 
-    private func copyBinary(from source: URL, to dest: URL) throws {
+    @discardableResult
+    private func copyBinary(from source: URL, to dest: URL) throws -> Bool {
         if fileManager.fileExists(atPath: dest.path) {
-            if let s = try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-               let d = try? dest.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-               s == d {
-                return
+            if fileManager.contentsEqual(atPath: source.path, andPath: dest.path) {
+                return false
             }
             try fileManager.removeItem(at: dest)
         }
         try fileManager.copyItem(at: source, to: dest)
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dest.path)
+        return true
     }
 
     private func writeIcon(from image: NSImage, to url: URL) throws {
         guard let tiff = image.tiffRepresentation,
               let rep = NSBitmapImageRep(data: tiff),
               let pngData = rep.representation(using: .png, properties: [:]) else {
-            return
+            throw NSError(domain: "ProxyFactory", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "Snapshot cannot be encoded as PNG"
+            ])
         }
-        // PNG записывается как icon.icns — Dock корректно отображает PNG
-        // с указанным CFBundleIconFile.
         try pngData.write(to: url, options: [.atomic])
+    }
+
+    private func notifyPreviewUpdated(key: String) {
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(Self.previewUpdatedNotificationName),
+            object: key,
+            userInfo: nil,
+            deliverImmediately: true
+        )
     }
 
     private func registerBundle(at url: URL) throws {
@@ -220,9 +259,29 @@ public final class ProxyFactory {
 
     /// Запустить прокси-процесс если он не running или упал.
     private func launchIfNeeded(key: String, bundleURL: URL) throws {
+        let bundleIdentifier = Self.proxyBundlePrefix + key
         lock.lock()
+        let shuttingDown = isShuttingDown
         let existing = runningProxies[key]
+        let isUpgrading = upgradingProxyKeys.contains(key)
+        let isLaunching = launchingProxyKeys.contains(key)
         lock.unlock()
+
+        guard !shuttingDown else { return }
+
+        if isUpgrading {
+            let oldInstances = NSRunningApplication.runningApplications(
+                withBundleIdentifier: bundleIdentifier
+            )
+            if !oldInstances.isEmpty {
+                oldInstances.forEach { $0.terminate() }
+                return
+            }
+            lock.lock()
+            upgradingProxyKeys.remove(key)
+            runningProxies.removeValue(forKey: key)
+            lock.unlock()
+        }
 
         // Если уже running и не завершён — ничего не делаем.
         if let app = existing, !app.isTerminated {
@@ -233,6 +292,8 @@ public final class ProxyFactory {
             return
         }
 
+        guard !isLaunching else { return }
+
         // Запускаем через NSWorkspace.open — это создаёт running app,
         // и Dock показывает tile.
         let config = NSWorkspace.OpenConfiguration()
@@ -240,54 +301,99 @@ public final class ProxyFactory {
         config.hides = false
         config.createsNewApplicationInstance = false
 
+        lock.lock()
+        guard !isShuttingDown, !launchingProxyKeys.contains(key) else {
+            lock.unlock()
+            return
+        }
+        launchingProxyKeys.insert(key)
+        lock.unlock()
+
         DiagnosticJournal.shared.log("proxy", "launch_requested", fields: [
             "key": key,
             "bundleURL": bundleURL.path
         ])
 
         NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { [weak self] app, error in
-            guard let self else { return }
-            guard let app else {
-                DiagnosticJournal.shared.log("proxy", "launch_failed", fields: [
-                    "key": key,
-                    "error": error?.localizedDescription ?? "unknown"
-                ])
-                return
-            }
+                guard let self else { return }
 
-            self.lock.lock()
-            let stillDesired = self.desiredProxyKeys.contains(key)
-            if stillDesired {
-                self.runningProxies[key] = app
-            }
-            self.lock.unlock()
+                self.lock.lock()
+                self.launchingProxyKeys.remove(key)
+                let stillDesired = !self.isShuttingDown && self.desiredProxyKeys.contains(key)
+                if let app, stillDesired {
+                    self.runningProxies[key] = app
+                }
+                self.lock.unlock()
 
-            if stillDesired {
-                DiagnosticJournal.shared.log("proxy", "launched", fields: [
-                    "key": key,
-                    "pid": app.processIdentifier
-                ])
-            } else {
-                app.terminate()
-                DiagnosticJournal.shared.log("proxy", "late_launch_terminated", fields: [
-                    "key": key,
-                    "pid": app.processIdentifier
-                ])
-            }
+                guard let app else {
+                    let launchError = error ?? NSError(domain: "ProxyFactory", code: 4, userInfo: [
+                        NSLocalizedDescriptionKey: "LaunchServices returned no proxy application"
+                    ])
+                    DiagnosticJournal.shared.log("proxy", "launch_failed", fields: [
+                        "key": key,
+                        "error": launchError.localizedDescription
+                    ])
+                    return
+                }
+
+                if stillDesired {
+                    DiagnosticJournal.shared.log("proxy", "launched", fields: [
+                        "key": key,
+                        "pid": app.processIdentifier
+                    ])
+                } else {
+                    app.terminate()
+                    DiagnosticJournal.shared.log("proxy", "late_launch_terminated", fields: [
+                        "key": key,
+                        "pid": app.processIdentifier
+                    ])
+                }
         }
     }
 
     /// Завершить running прокси по ключу.
-    private func terminateProxy(key: String) {
+    private func terminateProxy(key: String) -> Bool {
+        let bundleIdentifier = Self.proxyBundlePrefix + key
         lock.lock()
         desiredProxyKeys.remove(key)
+        upgradingProxyKeys.remove(key)
+        let isLaunching = launchingProxyKeys.contains(key)
         let app = runningProxies.removeValue(forKey: key)
         lock.unlock()
-        let terminated = app?.terminate() ?? true
+
+        guard !isLaunching else { return false }
+
+        var applications = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+        if let app, !applications.contains(where: { $0.processIdentifier == app.processIdentifier }) {
+            applications.append(app)
+        }
+        applications.forEach {
+            if !$0.terminate() {
+                _ = $0.forceTerminate()
+            }
+        }
+        let terminated = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty
         DiagnosticJournal.shared.log("proxy", "terminated", fields: [
             "key": key,
-            "pid": app?.processIdentifier ?? -1,
+            "pids": applications.map(\.processIdentifier),
             "requested": terminated
+        ])
+        return terminated
+    }
+
+    private func beginProxyUpgrade(key: String) {
+        let bundleIdentifier = Self.proxyBundlePrefix + key
+        lock.lock()
+        upgradingProxyKeys.insert(key)
+        let tracked = runningProxies[key]
+        lock.unlock()
+
+        tracked?.terminate()
+        NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
+            .forEach { $0.terminate() }
+        DiagnosticJournal.shared.log("proxy", "upgrade_requested", fields: [
+            "key": key,
+            "bundleID": bundleIdentifier
         ])
     }
 }

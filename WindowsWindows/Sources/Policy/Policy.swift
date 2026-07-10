@@ -24,6 +24,8 @@ public enum Policy {
         "com.apple.finder",            // Finder windows — обычно мусор для shelf
         "com.apple.WindowManager",
         "com.apple.appkit.xctoolchain",
+        // Capture overlays create short-lived utility windows, not user documents.
+        "pl.maketheweb.cleanshotx",
         // Собственный bundle id — чтобы не отслеживать свои же прокси и main app.
         "com.windowswindows.app",
         // Прокси-бандлы имеют префикс; отдельная проверка в Policy.admit

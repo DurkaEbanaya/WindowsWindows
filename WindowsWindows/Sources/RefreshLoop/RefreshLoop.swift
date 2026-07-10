@@ -1,37 +1,23 @@
 import Foundation
 import Cocoa
 
-/// Периодический цикл синхронизации прокси-бандлов с реальными окнами.
-///
-/// На каждом тике (по умолчанию каждые 2с):
-/// 1. `WindowDiscovery.discover()` — получить текущие окна.
-/// 2. Для новых окон (нет прокси) — создать прокси + снапшот.
-/// 3. Для существующих — обновить, если изменился title или прошла
-///    `snapshotInterval` с последнего снимка.
-/// 4. Удалить прокси для исчезнувших окон.
-/// 5. Очистить дисковые прокси-бандлы без соответствующих окон.
-///
-/// Rekeying: окно с изменившимся wid = новый прокси. Старый удаляется
-/// (если его wid не появился в новом списке). Это by design —
-/// "склеивание" окон через эвристику хрупко и ведёт к гонкам.
-public final class RefreshLoop {
-
+/// Periodically reconciles proxy bundles with the set of real windows.
+/// All mutable reconciliation state is actor-isolated, so capture operations
+/// from adjacent timer events can never overlap.
+public actor RefreshLoop {
     private let discovery: WindowDiscovery
     private let factory: ProxyFactory
     private let snapshotter: WindowSnapshotter
     private let configStore: ConfigStore
 
     private var timer: DispatchSourceTimer?
+    private var tickTask: Task<Void, Never>?
+    private var isShuttingDown = false
     private var lastSnapshotTimes: [WindowKey: Date] = [:]
     private var lastTitles: [WindowKey: String] = [:]
-
-    /// Интервал превью-обновления. Берётся из конфига, но cached здесь
-    /// чтобы не дёргать диск на каждом тике.
+    private var lastCaptureAuthorization: Bool?
     private var snapshotInterval: TimeInterval = 5.0
-
-    /// Callback: обновлённый список текущих окон. Вызывается на main thread
-    /// после каждого тика. AppDelegate использует это для IPC-обработки.
-    public var onWindowsUpdated: (([WindowKey: ObservedWindow]) -> Void)?
+    private var onWindowsUpdated: (@MainActor @Sendable ([WindowKey: ObservedWindow]) -> Void)?
 
     public init(
         discovery: WindowDiscovery,
@@ -46,61 +32,108 @@ public final class RefreshLoop {
     }
 
     public func start() {
-        guard timer == nil else { return }
+        guard timer == nil, !isShuttingDown else { return }
         let config = (try? configStore.load()) ?? .default
         snapshotInterval = config.snapshotInterval
 
-        let t = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        t.schedule(deadline: .now(), repeating: config.refreshInterval)
-        t.setEventHandler { [weak self] in
-            self?.tick()
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now(), repeating: config.refreshInterval)
+        timer.setEventHandler { [weak self] in
+            Task { await self?.beginTickIfIdle() }
         }
-        t.resume()
-        self.timer = t
+        timer.resume()
+        self.timer = timer
     }
 
-    public func stop() {
+    public func shutdown() async {
+        guard !isShuttingDown else { return }
+        isShuttingDown = true
         timer?.cancel()
         timer = nil
+        let activeTick = tickTask
+        activeTick?.cancel()
+        await activeTick?.value
+        tickTask = nil
     }
 
-    /// Один цикл синхронизации. Публичный для возможности ручного вызова
-    /// (например, после изменения конфига).
     public func tick() {
+        beginTickIfIdle()
+    }
+
+    public func setOnWindowsUpdated(
+        _ callback: @escaping @MainActor @Sendable ([WindowKey: ObservedWindow]) -> Void
+    ) {
+        onWindowsUpdated = callback
+    }
+
+    public func resolveWindow(key: WindowKey) -> ObservedWindow? {
+        let config = (try? configStore.load()) ?? .default
+        return discovery.discover(config: config).first(where: { $0.key == key })
+    }
+
+    private func beginTickIfIdle() {
+        guard tickTask == nil, !isShuttingDown else { return }
+        tickTask = Task { [weak self] in
+            await self?.performTick()
+            await self?.tickDidFinish()
+        }
+    }
+
+    private func tickDidFinish() {
+        tickTask = nil
+    }
+
+    private func performTick() async {
         let config = (try? configStore.load()) ?? .default
         snapshotInterval = config.snapshotInterval
 
         let windows = discovery.discover(config: config)
         let windowMap = Dictionary(uniqueKeysWithValues: windows.map { ($0.key, $0) })
         let validKeys = Set(windowMap.keys)
+        let captureAuthorized = await snapshotter.isCaptureAuthorized
 
-        // 0. Опубликовать текущий snapshot окон для IPC-обработчика.
-        if let cb = onWindowsUpdated {
-            DispatchQueue.main.async { cb(windowMap) }
+        if lastCaptureAuthorization != captureAuthorized {
+            lastCaptureAuthorization = captureAuthorized
+            DiagnosticJournal.shared.log("snapshot", "authorization_changed", fields: [
+                "authorized": captureAuthorized
+            ])
         }
 
-        // 1. Создать / обновить прокси для существующих окон.
+        if let callback = onWindowsUpdated {
+            Task { @MainActor in callback(windowMap) }
+        }
+
         for window in windows {
+            guard !Task.isCancelled else { return }
             do {
-                let shouldSnapshot = shouldRefreshSnapshot(for: window)
-                let snapshot: NSImage? = shouldSnapshot
-                    ? awaitSyncSnapshot(windowID: window.windowNumber)
-                    : nil
+                let shouldSnapshot = captureAuthorized && shouldRefreshSnapshot(for: window)
+                let snapshot: NSImage?
+                if shouldSnapshot {
+                    do {
+                        snapshot = try await snapshotter.capture(windowID: window.windowNumber)
+                    } catch {
+                        snapshot = nil
+                        DiagnosticJournal.shared.log("snapshot", "capture_failed", fields: [
+                            "windowID": window.windowNumber,
+                            "error": error.localizedDescription
+                        ])
+                    }
+                } else {
+                    snapshot = nil
+                }
+
+                guard !Task.isCancelled else { return }
                 try factory.ensure(window: window, snapshot: snapshot)
                 lastTitles[window.key] = window.title
-                if shouldSnapshot {
+                if snapshot != nil {
                     lastSnapshotTimes[window.key] = Date()
                 }
             } catch {
-                // Логировать, но не падать — один сломанный прокси не должен
-                // останавливать весь цикл.
                 NSLog("ProxyFactory.ensure failed for \(window.key.stringValue): \(error.localizedDescription)")
             }
         }
 
-        // 2. Удалить прокси для исчезнувших окон.
-        let existingKeys = Set(factory.existingProxyKeys())
-        let staleKeys = existingKeys.subtracting(validKeys)
+        let staleKeys = Set(factory.existingProxyKeys()).subtracting(validKeys)
         for key in staleKeys {
             do {
                 try factory.remove(windowKey: key)
@@ -112,31 +145,14 @@ public final class RefreshLoop {
         }
     }
 
-    // MARK: - Internal
-
     private func shouldRefreshSnapshot(for window: ObservedWindow) -> Bool {
-        // Title изменился → обязательно переснять.
         if lastTitles[window.key] != window.title {
             return true
         }
-        // Прошёл snapshotInterval → переснять.
         if let last = lastSnapshotTimes[window.key],
            Date().timeIntervalSince(last) < snapshotInterval {
             return false
         }
         return true
-    }
-
-    /// Синхронно дождаться асинхронного снапшота.
-    /// Использует semaphore — acceptable т.к. refresh идёт в utility-queue.
-    private func awaitSyncSnapshot(windowID: CGWindowID) -> NSImage? {
-        let sem = DispatchSemaphore(value: 0)
-        var result: NSImage?
-        Task {
-            result = await snapshotter.capture(windowID: windowID)
-            sem.signal()
-        }
-        _ = sem.wait(timeout: .now() + 3.0)
-        return result
     }
 }

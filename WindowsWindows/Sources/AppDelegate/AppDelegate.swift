@@ -1,7 +1,8 @@
 import Cocoa
-import ApplicationServices
+@preconcurrency import ApplicationServices
 
 /// Координатор: связывает все модули воедино и управляет жизненным циклом.
+@MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var configStore: ConfigStore!
@@ -66,14 +67,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // 3b. Обновление knownWindows из RefreshLoop.
-        refreshLoop.onWindowsUpdated = { [weak self] map in
-            self?.knownWindowsLock.lock()
-            self?.knownWindows = map
-            self?.knownWindowsLock.unlock()
+        let loop = refreshLoop!
+        Task {
+            await loop.setOnWindowsUpdated { [weak self] map in
+                self?.knownWindowsLock.lock()
+                self?.knownWindows = map
+                self?.knownWindowsLock.unlock()
+            }
+            await loop.start()
         }
-
-        // 4. Запуск refresh-цикла.
-        refreshLoop.start()
 
         NSLog("WindowsWindows started. ProxyApps dir: \(configStore.proxyAppsURL.path)")
         DiagnosticJournal.shared.log("lifecycle", "started", fields: [
@@ -81,13 +83,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             "axResolverAvailable": AXWindowIDResolver.shared.isAvailable,
             "accessibilityTrusted": AXIsProcessTrusted()
         ])
+
+        requestScreenCapturePermissionIfNeeded()
     }
 
-    public func applicationWillTerminate(_ notification: Notification) {
-        refreshLoop?.stop()
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        factory?.shutdown()
         ipc?.stopListening()
-        factory?.terminateAll()
         focusTracker?.stop()
+        if let refreshLoop {
+            Task { await refreshLoop.shutdown() }
+        }
+        return .terminateNow
     }
 
     // MARK: - Internal
@@ -112,6 +119,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // здесь отдельной логики — permissions запрашиваются по требованию.
     }
 
+    private func requestScreenCapturePermissionIfNeeded() {
+        guard !CGPreflightScreenCaptureAccess() else { return }
+
+        let granted = CGRequestScreenCaptureAccess()
+        DiagnosticJournal.shared.log("permission", "screen_capture_requested", fields: [
+            "granted": granted
+        ])
+        if !granted,
+           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     /// Обработка клика по прокси в Dock.
     /// Прокси прислал windowKey → находим окно в knownWindows → toggle.
     private func handleProxyActivation(key: WindowKey) {
@@ -125,23 +145,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         knownWindowsLock.unlock()
 
         guard let window = window else {
-            // Окно могло исчезнуть между кликом и обработкой. Пытаемся
-            // найти его в свежем discovery.
-            let config = (try? configStore.load()) ?? .default
-            let fresh = discovery.discover(config: config)
-            if let found = fresh.first(where: { $0.key == key }) {
-                DiagnosticJournal.shared.log("ipc", "window_refreshed_for_click", fields: [
-                    "key": key.stringValue,
-                    "title": found.title
-                ])
-                windowController.toggle(
-                    window: found,
-                    wasFocusedBeforeProxy: wasFocusedBeforeProxy
-                )
-            } else {
-                DiagnosticJournal.shared.log("ipc", "window_not_found_for_click", fields: [
-                    "key": key.stringValue
-                ])
+            let loop = refreshLoop!
+            Task { [weak self] in
+                guard let self else { return }
+                if let found = await loop.resolveWindow(key: key) {
+                    DiagnosticJournal.shared.log("ipc", "window_refreshed_for_click", fields: [
+                        "key": key.stringValue,
+                        "title": found.title
+                    ])
+                    windowController.toggle(
+                        window: found,
+                        wasFocusedBeforeProxy: wasFocusedBeforeProxy
+                    )
+                } else {
+                    DiagnosticJournal.shared.log("ipc", "window_not_found_for_click", fields: [
+                        "key": key.stringValue
+                    ])
+                }
             }
             return
         }

@@ -1,79 +1,158 @@
 import Cocoa
 import ApplicationServices
 
-/// Tracks the exact real window that was focused immediately before Dock
-/// activated a WindowsWindows proxy application.
-///
-/// A proxy becomes the frontmost app before its distributed click notification
-/// reaches the main process, so querying `NSWorkspace.frontmostApplication` in
-/// the click handler is too late. NSWorkspace sends didDeactivate for the real
-/// app first; at that point its AXFocusedWindow still identifies the exact
-/// window. We persist that WindowKey and use it as the toggle precondition.
+/// Tracks the focused window while a real application is active.
+/// Reading AXFocusedWindow after deactivation is inherently racy, so focus is
+/// observed while valid and preserved while a proxy briefly owns activation.
+@MainActor
 public final class WindowFocusTracker {
     private let resolver: AXWindowIDResolver
-    private let lock = NSLock()
-    private var lastDeactivatedWindow: WindowKey?
-    private var observers: [NSObjectProtocol] = []
+    private var focusedWindow: WindowKey?
+    private var isStarted = false
+    private var axObserver: AXObserver?
+    private var observedPID: pid_t?
 
     public init(resolver: AXWindowIDResolver = .shared) {
         self.resolver = resolver
     }
 
     public func start() {
-        guard observers.isEmpty else { return }
+        guard !isStarted else { return }
+        isStarted = true
         let center = NSWorkspace.shared.notificationCenter
-        observers.append(center.addObserver(
-            forName: NSWorkspace.didDeactivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            self?.captureDeactivatedApplication(notification)
-        })
+        center.addObserver(
+            self,
+            selector: #selector(applicationActivated(_:)),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+
+        if let frontmost = NSWorkspace.shared.frontmostApplication {
+            observe(application: frontmost)
+        }
     }
 
     public func stop() {
-        let center = NSWorkspace.shared.notificationCenter
-        observers.forEach(center.removeObserver)
-        observers.removeAll()
+        guard isStarted else { return }
+        isStarted = false
+        NSWorkspace.shared.notificationCenter.removeObserver(
+            self,
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+        removeAXObserver()
     }
 
     public func wasFocusedImmediatelyBeforeProxy(_ key: WindowKey) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return lastDeactivatedWindow == key
+        return focusedWindow == key
     }
 
-    private func captureDeactivatedApplication(_ notification: Notification) {
+    @objc private func applicationActivated(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-              let bundleID = app.bundleIdentifier,
+              let bundleID = app.bundleIdentifier else {
+            return
+        }
+        if Policy.isProxyBundle(bundleID) {
+            removeAXObserver()
+            return
+        }
+        if bundleID == "com.windowswindows.app" {
+            removeAXObserver()
+            focusedWindow = nil
+            return
+        }
+        observe(application: app)
+    }
+
+    private func observe(application: NSRunningApplication) {
+        guard let bundleID = application.bundleIdentifier,
               !Policy.isProxyBundle(bundleID),
               bundleID != "com.windowswindows.app" else {
             return
         }
 
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        removeAXObserver()
+        focusedWindow = nil
+        let pid = application.processIdentifier
+        let appElement = AXUIElementCreateApplication(pid)
+        var newObserver: AXObserver?
+        observedPID = pid
+        let createResult = AXObserverCreate(pid, { _, element, _, context in
+            guard let context else { return }
+            var eventPID: pid_t = 0
+            let tracker = Unmanaged<WindowFocusTracker>.fromOpaque(context).takeUnretainedValue()
+            MainActor.assumeIsolated {
+                guard AXUIElementGetPid(element, &eventPID) == .success else {
+                    tracker.focusedWindow = nil
+                    return
+                }
+                tracker.captureFocusedWindow(pid: eventPID)
+            }
+        }, &newObserver)
+
+        if createResult == .success, let newObserver {
+            let context = Unmanaged.passUnretained(self).toOpaque()
+            let addResult = AXObserverAddNotification(
+                newObserver,
+                appElement,
+                kAXFocusedWindowChangedNotification as CFString,
+                context
+            )
+            if addResult == .success {
+                axObserver = newObserver
+                CFRunLoopAddSource(
+                    CFRunLoopGetMain(),
+                    AXObserverGetRunLoopSource(newObserver),
+                    .commonModes
+                )
+                captureFocusedWindow(pid: pid)
+                return
+            }
+        }
+        removeAXObserver()
+        focusedWindow = nil
+    }
+
+    private func captureFocusedWindow(pid: pid_t) {
+        guard observedPID == pid else { return }
+        let appElement = AXUIElementCreateApplication(pid)
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
+        let result = AXUIElementCopyAttributeValue(
             appElement,
             kAXFocusedWindowAttribute as CFString,
             &value
-        ) == .success,
-              let focused = value as! AXUIElement?,
-              let windowID = resolver.windowID(for: focused) else {
-            DiagnosticJournal.shared.log("focus", "deactivation_without_focused_window", fields: [
-                "pid": app.processIdentifier,
-                "bundleID": bundleID
+        )
+
+        if result == .success,
+           let focused = value as! AXUIElement?,
+           let windowID = resolver.windowID(for: focused) {
+            let key = WindowKey(appPID: pid, windowNumber: windowID)
+            focusedWindow = key
+
+            DiagnosticJournal.shared.log("focus", "focused_window_observed", fields: [
+                "pid": pid,
+                "key": key.stringValue,
+                "axError": result.rawValue
             ])
             return
         }
-
-        let key = WindowKey(appPID: app.processIdentifier, windowNumber: windowID)
-        lock.lock()
-        lastDeactivatedWindow = key
-        lock.unlock()
-        DiagnosticJournal.shared.log("focus", "real_window_deactivated", fields: [
-            "key": key.stringValue,
-            "bundleID": bundleID
+        focusedWindow = nil
+        DiagnosticJournal.shared.log("focus", "focused_window_observed", fields: [
+            "pid": pid,
+            "key": "",
+            "axError": result.rawValue
         ])
+    }
+
+    private func removeAXObserver() {
+        if let axObserver {
+            CFRunLoopRemoveSource(
+                CFRunLoopGetMain(),
+                AXObserverGetRunLoopSource(axObserver),
+                .commonModes
+            )
+        }
+        axObserver = nil
+        observedPID = nil
     }
 }

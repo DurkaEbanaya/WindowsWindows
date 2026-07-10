@@ -8,7 +8,7 @@ import Foundation
 /// пользователь не может переопределить через конфиг (защита от случайной
 /// регистрации прокси для системных UI-процессов, что приведёт к зацикливанию
 /// и визуальному мусору).
-public struct ShelfConfig: Codable {
+public struct ShelfConfig: Codable, Sendable {
     public var scopeMode: ScopeMode
     public var bundleIdentifiers: [String]
     /// Интервал обновления состояния, секунд.

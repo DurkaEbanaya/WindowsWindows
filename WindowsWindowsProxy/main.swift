@@ -1,5 +1,6 @@
 import Foundation
 import Cocoa
+import Darwin
 
 /// Точка входа прокси-бандла.
 ///
@@ -35,44 +36,81 @@ struct WindowsWindowsProxyMain {
     }
 }
 
+@MainActor
 final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     // Синхронизировать с ProxyIPC.swift (main app).
     private static let notificationName = "com.windowswindows.proxy.activated"
+    private static let previewUpdatedNotificationName = "com.windowswindows.proxy.preview-updated"
     private static let windowKeyUserInfoKey = "windowKey"
+    private static let previewFileName = "preview.png"
 
     private let windowKey: String
+    private let mainPID: pid_t
+    private var ownerWatchdog: Timer?
     private var lastActivationTime: Date = .distantPast
+    private var pendingActivation = false
     private static let debounceInterval: TimeInterval = 0.3
 
     override init() {
         let key = Bundle.main.object(forInfoDictionaryKey: "WWWindowKey") as? String ?? ""
+        let ownerPID = Bundle.main.object(forInfoDictionaryKey: "WWMainPID") as? Int ?? 0
         self.windowKey = key
+        self.mainPID = pid_t(ownerPID)
         super.init()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if windowKey.isEmpty {
+        if windowKey.isEmpty || mainPID <= 0 {
             NSApp.terminate(nil)
             return
         }
-        // Сразу спрятаться — не красть фокус у текущего foreground app.
+        updateDockPreview()
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(previewUpdated(_:)),
+            name: Notification.Name(Self.previewUpdatedNotificationName),
+            object: windowKey
+        )
+
         // Tile остаётся в Dock (running Foreground app).
         NSApp.hide(nil)
+        ownerWatchdog = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            if kill(self.mainPID, 0) == -1 && errno == ESRCH {
+                Task { @MainActor in
+                    NSApp.terminate(nil)
+                }
+            }
+        }
     }
 
     /// macOS активировала прокси → пользователь кликнул на tile в Dock.
     func applicationDidBecomeActive(_ notification: Notification) {
         let now = Date()
+        NSApp.hide(nil)
         if now.timeIntervalSince(lastActivationTime) < Self.debounceInterval {
             return
         }
         lastActivationTime = now
+        pendingActivation = true
+    }
 
+    func applicationDidResignActive(_ notification: Notification) {
+        guard pendingActivation else { return }
+        pendingActivation = false
         broadcastActivation()
+    }
 
-        // Сразу спрятаться — фокус переходит на реальное окно, которое
-        // поднимет main app через AX.
-        NSApp.hide(nil)
+    @objc private func previewUpdated(_ notification: Notification) {
+        updateDockPreview()
+    }
+
+    private func updateDockPreview() {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent(Self.previewFileName),
+              let image = NSImage(contentsOf: url) else {
+            return
+        }
+        NSApp.applicationIconImage = image
     }
 
     private func broadcastActivation() {
