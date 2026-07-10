@@ -67,4 +67,13 @@ public enum Policy {
     public static func isProxyBundle(_ bundleIdentifier: String) -> Bool {
         bundleIdentifier.hasPrefix(proxyBundlePrefix)
     }
+
+    /// Whether an application can be placed in the user-managed scope list.
+    /// Hard exclusions are policy, not editable configuration.
+    public static func isUserConfigurable(bundleIdentifier: String) -> Bool {
+        !bundleIdentifier.isEmpty
+            && !bundleIdentifier.hasPrefix("com.apple.")
+            && !systemExclusions.contains(bundleIdentifier)
+            && !isProxyBundle(bundleIdentifier)
+    }
 }

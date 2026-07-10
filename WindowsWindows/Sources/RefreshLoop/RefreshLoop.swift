@@ -15,8 +15,11 @@ public actor RefreshLoop {
     private var isShuttingDown = false
     private var lastSnapshotTimes: [WindowKey: Date] = [:]
     private var lastTitles: [WindowKey: String] = [:]
+    private var lastKnownWindows: [WindowKey: ObservedWindow] = [:]
     private var lastCaptureAuthorization: Bool?
+    private var refreshInterval: TimeInterval = 2.0
     private var snapshotInterval: TimeInterval = 5.0
+    private var lastKnownConfig: ShelfConfig?
     private var onWindowsUpdated: (@MainActor @Sendable ([WindowKey: ObservedWindow]) -> Void)?
 
     public init(
@@ -33,16 +36,11 @@ public actor RefreshLoop {
 
     public func start() {
         guard timer == nil, !isShuttingDown else { return }
-        let config = (try? configStore.load()) ?? .default
-        snapshotInterval = config.snapshotInterval
-
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        timer.schedule(deadline: .now(), repeating: config.refreshInterval)
-        timer.setEventHandler { [weak self] in
-            Task { await self?.beginTickIfIdle() }
+        if let config = loadConfig() {
+            refreshInterval = config.refreshInterval
+            snapshotInterval = config.snapshotInterval
         }
-        timer.resume()
-        self.timer = timer
+        scheduleNextTick(after: 0)
     }
 
     public func shutdown() async {
@@ -67,8 +65,11 @@ public actor RefreshLoop {
     }
 
     public func resolveWindow(key: WindowKey) -> ObservedWindow? {
-        let config = (try? configStore.load()) ?? .default
-        return discovery.discover(config: config).first(where: { $0.key == key })
+        let config = loadConfig()
+        guard let config else { return nil }
+        let snapshot = discovery.discover(config: config)
+        reconcileKnownWindows(with: snapshot)
+        return lastKnownWindows[key]
     }
 
     private func beginTickIfIdle() {
@@ -81,15 +82,21 @@ public actor RefreshLoop {
 
     private func tickDidFinish() {
         tickTask = nil
+        guard !isShuttingDown else { return }
+        scheduleNextTick(after: refreshInterval)
     }
 
     private func performTick() async {
-        let config = (try? configStore.load()) ?? .default
+        let config = loadConfig()
+        guard let config else { return }
+        refreshInterval = config.refreshInterval
         snapshotInterval = config.snapshotInterval
 
-        let windows = discovery.discover(config: config)
+        let discoverySnapshot = discovery.discover(config: config)
+        let windows = discoverySnapshot.windows
         let windowMap = Dictionary(uniqueKeysWithValues: windows.map { ($0.key, $0) })
         let validKeys = Set(windowMap.keys)
+        reconcileKnownWindows(with: discoverySnapshot)
         let captureAuthorized = await snapshotter.isCaptureAuthorized
 
         if lastCaptureAuthorization != captureAuthorized {
@@ -100,7 +107,8 @@ public actor RefreshLoop {
         }
 
         if let callback = onWindowsUpdated {
-            Task { @MainActor in callback(windowMap) }
+            let knownWindows = lastKnownWindows
+            Task { @MainActor in callback(knownWindows) }
         }
 
         for window in windows {
@@ -133,7 +141,18 @@ public actor RefreshLoop {
             }
         }
 
-        let staleKeys = Set(factory.existingProxyKeys()).subtracting(validKeys)
+        do {
+            try factory.removeInvalidProxyBundles()
+        } catch {
+            NSLog("ProxyFactory.removeInvalidProxyBundles failed: \(error.localizedDescription)")
+        }
+        let staleKeys = factory.existingProxies().filter { proxy in
+            return !validKeys.contains(proxy.key)
+                && discoverySnapshot.isAbsenceAuthoritative(
+                    for: proxy.key,
+                    persistedProcessIdentity: proxy.processIdentity
+                )
+        }.map(\.key)
         for key in staleKeys {
             do {
                 try factory.remove(windowKey: key)
@@ -154,5 +173,53 @@ public actor RefreshLoop {
             return false
         }
         return true
+    }
+
+    private func reconcileKnownWindows(with snapshot: WindowDiscoverySnapshot) {
+        let currentKeys = Set(snapshot.windows.map(\.key))
+        let removedKeys = Set(lastKnownWindows.keys).subtracting(currentKeys).filter {
+            guard let window = lastKnownWindows[$0] else { return true }
+            return snapshot.isAbsenceAuthoritative(
+                for: window.key,
+                persistedProcessIdentity: window.processIdentity
+            )
+        }
+        for key in removedKeys {
+            lastKnownWindows.removeValue(forKey: key)
+        }
+        for window in snapshot.windows {
+            lastKnownWindows[window.key] = window
+        }
+    }
+
+    private func loadConfig() -> ShelfConfig? {
+        do {
+            let config = try configStore.load()
+            lastKnownConfig = config
+            return config
+        } catch {
+            DiagnosticJournal.shared.log("config", "load_failed", fields: [
+                "path": configStore.configURL.path,
+                "error": error.localizedDescription
+            ])
+            return lastKnownConfig
+        }
+    }
+
+    private func scheduleNextTick(after delay: TimeInterval) {
+        timer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now() + delay)
+        timer.setEventHandler { [weak self] in
+            Task { await self?.timerFired() }
+        }
+        timer.resume()
+        self.timer = timer
+    }
+
+    private func timerFired() {
+        timer?.cancel()
+        timer = nil
+        beginTickIfIdle()
     }
 }

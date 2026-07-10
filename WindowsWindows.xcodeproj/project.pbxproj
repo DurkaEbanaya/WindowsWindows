@@ -24,6 +24,13 @@
 		AA000111 /* WindowFocusTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110111 /* WindowFocusTracker.swift */; };
 		AA000100 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110000 /* main.swift */; };
 		AA000101 /* WindowsWindowsProxy binary in Copy Files */ = {isa = PBXBuildFile; fileRef = AA110100 /* WindowsWindowsProxy */; };
+		AA000200 /* main.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA120000 /* main.swift (wwctl) */; };
+		AA000201 /* ApplicationEntry.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA100011 /* ApplicationEntry.swift */; };
+		AA000202 /* ShelfConfig.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA100012 /* ShelfConfig.swift */; };
+		AA000203 /* ConfigStore.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA100020 /* ConfigStore.swift */; };
+		AA000204 /* Policy.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA100030 /* Policy.swift */; };
+		AA000205 /* wwctl binary in Copy Files */ = {isa = PBXBuildFile; fileRef = AA120100 /* wwctl */; };
+		AA000300 /* ConfigurationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA130000 /* ConfigurationContractTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -47,6 +54,10 @@
 		AA100200 /* WindowsWindows.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindowsWindows.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA110000 /* main.swift (proxy) */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = WindowsWindowsProxy/main.swift; sourceTree = "<group>"; };
 		AA110100 /* WindowsWindowsProxy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WindowsWindowsProxy; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA120000 /* main.swift (wwctl) */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = WindowsWindowsTUI/main.swift; sourceTree = "<group>"; };
+		AA120100 /* wwctl */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = wwctl; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA130000 /* ConfigurationContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationContractTests.swift; sourceTree = "<group>"; };
+		AA130100 /* WindowsWindowsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WindowsWindowsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -55,6 +66,8 @@
 			children = (
 				AA200001 /* WindowsWindows */,
 				AA200003 /* WindowsWindowsProxy */,
+				AA200004 /* WindowsWindowsTUI */,
+				AA200005 /* WindowsWindowsTests */,
 				AA200002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -64,6 +77,8 @@
 			children = (
 				AA100200 /* WindowsWindows.app */,
 				AA110100 /* WindowsWindowsProxy */,
+				AA120100 /* wwctl */,
+				AA130100 /* WindowsWindowsTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -74,6 +89,22 @@
 				AA110000 /* main.swift (proxy) */,
 			);
 			name = WindowsWindowsProxy;
+			sourceTree = "<group>";
+		};
+		AA200004 /* WindowsWindowsTUI */ = {
+			isa = PBXGroup;
+			children = (
+				AA120000 /* main.swift (wwctl) */,
+			);
+			name = WindowsWindowsTUI;
+			sourceTree = "<group>";
+		};
+		AA200005 /* WindowsWindowsTests */ = {
+			isa = PBXGroup;
+			children = (
+				AA130000 /* ConfigurationContractTests.swift */,
+			);
+			path = WindowsWindowsTests;
 			sourceTree = "<group>";
 		};
 		AA200001 /* WindowsWindows */ = {
@@ -211,6 +242,7 @@
 			);
 			dependencies = (
 				AA700000 /* PBXTargetDependency */,
+				AA700001 /* PBXTargetDependency (wwctl) */,
 			);
 			name = WindowsWindows;
 			productName = WindowsWindows;
@@ -232,6 +264,37 @@
 			productReference = AA110100 /* WindowsWindowsProxy */;
 			productType = "com.apple.product-type.tool";
 		};
+		AA300200 /* wwctl */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA400300 /* Build configuration list for PBXNativeTarget "wwctl" */;
+			buildPhases = (
+				AA500200 /* Sources (wwctl) */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = wwctl;
+			productName = wwctl;
+			productReference = AA120100 /* wwctl */;
+			productType = "com.apple.product-type.tool";
+		};
+		AA300300 /* WindowsWindowsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA400400 /* Build configuration list for PBXNativeTarget "WindowsWindowsTests" */;
+			buildPhases = (
+				AA500300 /* Sources (tests) */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AA700002 /* PBXTargetDependency (tests) */,
+			);
+			name = WindowsWindowsTests;
+			productName = WindowsWindowsTests;
+			productReference = AA130100 /* WindowsWindowsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXTargetDependency section */
@@ -239,6 +302,16 @@
 			isa = PBXTargetDependency;
 			target = AA300100 /* WindowsWindowsProxy */;
 			targetProxy = AA700100 /* PBXContainerItemProxy */;
+		};
+		AA700001 /* PBXTargetDependency (wwctl) */ = {
+			isa = PBXTargetDependency;
+			target = AA300200 /* wwctl */;
+			targetProxy = AA700101 /* PBXContainerItemProxy (wwctl) */;
+		};
+		AA700002 /* PBXTargetDependency (tests) */ = {
+			isa = PBXTargetDependency;
+			target = AA300000 /* WindowsWindows */;
+			targetProxy = AA700102 /* PBXContainerItemProxy (tests) */;
 		};
 /* End PBXTargetDependency section */
 
@@ -250,6 +323,20 @@
 			remoteGlobalIDString = AA300100;
 			remoteInfo = WindowsWindowsProxy;
 		};
+		AA700101 /* PBXContainerItemProxy (wwctl) */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA600000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA300200;
+			remoteInfo = wwctl;
+		};
+		AA700102 /* PBXContainerItemProxy (tests) */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA600000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA300000;
+			remoteInfo = WindowsWindows;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -260,6 +347,7 @@
 			dstSubfolderSpec = 7; /* Resources */
 			files = (
 				AA000101 /* WindowsWindowsProxy binary in Copy Files */,
+				AA000205 /* wwctl binary in Copy Files */,
 			);
 			name = "Copy Files";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -285,9 +373,11 @@
 			productRefGroup = AA200002 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (
+				targets = (
 				AA300000 /* WindowsWindows */,
 				AA300100 /* WindowsWindowsProxy */,
+				AA300200 /* wwctl */,
+				AA300300 /* WindowsWindowsTests */,
 			);
 		};
 /* End PBXProject section */
@@ -330,6 +420,26 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000100 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA500200 /* Sources (wwctl) */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000200 /* main.swift in Sources (wwctl) */,
+				AA000201 /* ApplicationEntry.swift in Sources (wwctl) */,
+				AA000202 /* ShelfConfig.swift in Sources (wwctl) */,
+				AA000203 /* ConfigStore.swift in Sources (wwctl) */,
+				AA000204 /* Policy.swift in Sources (wwctl) */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AA500300 /* Sources (tests) */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA000300 /* ConfigurationContractTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -387,14 +497,14 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				OTHER_SWIFT_FLAGS = "-parse-as-library";
-				MARKETING_VERSION = 0.2;
+				MARKETING_VERSION = 0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -409,14 +519,14 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				OTHER_SWIFT_FLAGS = "-parse-as-library";
-				MARKETING_VERSION = 0.2;
+				MARKETING_VERSION = 0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -432,6 +542,7 @@
 				OTHER_SWIFT_FLAGS = "-parse-as-library";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.proxy.executable";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -448,10 +559,73 @@
 				OTHER_SWIFT_FLAGS = "-parse-as-library";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.proxy.executable";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 5.0;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		AA400005 /* Debug (wwctl) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Manual;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-parse-as-library";
+				PRODUCT_NAME = wwctl;
+				SKIP_INSTALL = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA400006 /* Release (wwctl) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGN_STYLE = Manual;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_SWIFT_FLAGS = "-parse-as-library";
+				PRODUCT_NAME = wwctl;
+				SKIP_INSTALL = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA400007 /* Debug (tests) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.windowswindows.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WindowsWindows.app/Contents/MacOS/WindowsWindows";
+			};
+			name = Debug;
+		};
+		AA400008 /* Release (tests) */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.windowswindows.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WindowsWindows.app/Contents/MacOS/WindowsWindows";
 			};
 			name = Release;
 		};
@@ -481,6 +655,24 @@
 			buildConfigurations = (
 				AA400003 /* Debug (proxy) */,
 				AA400004 /* Release (proxy) */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA400300 /* Build configuration list for PBXNativeTarget "wwctl" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA400005 /* Debug (wwctl) */,
+				AA400006 /* Release (wwctl) */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA400400 /* Build configuration list for PBXNativeTarget "WindowsWindowsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA400007 /* Debug (tests) */,
+				AA400008 /* Release (tests) */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
