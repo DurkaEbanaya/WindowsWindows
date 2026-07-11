@@ -511,7 +511,7 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -533,7 +533,7 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
