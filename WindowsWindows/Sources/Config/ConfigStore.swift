@@ -51,50 +51,77 @@ public final class ConfigStore: @unchecked Sendable {
         self.decoder = JSONDecoder()
     }
 
-    /// Load and validate configuration. Invalid user data is never silently
-    /// overwritten: callers can keep the last known-good value and report the
-    /// exact error instead of destroying the file that needs correction.
-    public func load() throws -> ShelfConfig {
+    /// Load and validate the full workspace document. Invalid user data is never
+    /// silently overwritten: callers can keep the last known-good value and
+    /// report the exact error instead of destroying the file that needs
+    /// correction.
+    public func loadWorkspace() throws -> WorkspaceConfig {
         try withExclusiveLock {
             guard fileManager.fileExists(atPath: configURL.path) else {
-                let config = ShelfConfig.default
-                try saveLocked(config)
-                return config
+                let workspace = WorkspaceConfig.default
+                try saveWorkspaceLocked(workspace)
+                return workspace
             }
             let data = try Data(contentsOf: configURL)
-            let config = try decoder.decode(ShelfConfig.self, from: data).validated()
-            if try persistedSchemaVersion(in: data) != ShelfConfig.currentSchemaVersion {
-                try saveLocked(config)
+            let workspace = try decoder.decode(WorkspaceConfig.self, from: data).validated()
+            if try persistedSchemaVersion(in: data) != WorkspaceConfig.currentSchemaVersion {
+                try saveWorkspaceLocked(workspace)
             }
-            return config
+            return workspace
         }
+    }
+
+    public func load() throws -> ShelfConfig {
+        try loadWorkspace().effectiveShelfConfig
     }
 
     public func save(_ config: ShelfConfig) throws {
         try withExclusiveLock {
-            try saveLocked(config)
+            var workspace = try loadWorkspaceLocked()
+            try workspace.updateActiveShelfConfig { active in
+                active = config
+            }
+            try saveWorkspaceLocked(workspace)
+        }
+    }
+
+    public func saveWorkspace(_ workspace: WorkspaceConfig) throws {
+        try withExclusiveLock {
+            try saveWorkspaceLocked(workspace)
         }
     }
 
     /// Serialize a read-modify-write transaction across the app and `wwctl`.
     public func update(_ transform: (inout ShelfConfig) throws -> Void) throws -> ShelfConfig {
         try withExclusiveLock {
-            var config: ShelfConfig
-            if fileManager.fileExists(atPath: configURL.path) {
-                let data = try Data(contentsOf: configURL)
-                config = try decoder.decode(ShelfConfig.self, from: data).validated()
-            } else {
-                config = .default
-            }
-            try transform(&config)
-            let validated = try config.validated()
-            try saveLocked(validated)
+            var workspace = try loadWorkspaceLocked()
+            try workspace.updateActiveShelfConfig(transform)
+            let validated = try workspace.validated()
+            try saveWorkspaceLocked(validated)
+            return validated.effectiveShelfConfig
+        }
+    }
+
+    public func updateWorkspace(_ transform: (inout WorkspaceConfig) throws -> Void) throws -> WorkspaceConfig {
+        try withExclusiveLock {
+            var workspace = try loadWorkspaceLocked()
+            try transform(&workspace)
+            let validated = try workspace.validated()
+            try saveWorkspaceLocked(validated)
             return validated
         }
     }
 
-    private func saveLocked(_ config: ShelfConfig) throws {
-        let validated = try config.validated()
+    private func loadWorkspaceLocked() throws -> WorkspaceConfig {
+        guard fileManager.fileExists(atPath: configURL.path) else {
+            return .default
+        }
+        let data = try Data(contentsOf: configURL)
+        return try decoder.decode(WorkspaceConfig.self, from: data).validated()
+    }
+
+    private func saveWorkspaceLocked(_ workspace: WorkspaceConfig) throws {
+        let validated = try workspace.validated()
         let data = try encoder.encode(validated)
         try data.write(to: configURL, options: [.atomic])
     }

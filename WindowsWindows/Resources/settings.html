@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WindowsWindows</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: oklch(92% 0.006 255);
+      --surface: oklch(97% 0.004 255);
+      --surface-raised: oklch(100% 0 0);
+      --text-primary: oklch(20% 0.014 255);
+      --text-secondary: oklch(48% 0.012 255);
+      --accent: oklch(55% 0.18 253);
+      --accent-contrast: oklch(99% 0.002 255);
+      --separator: oklch(88% 0.006 255);
+      --reveal: oklch(82% 0.09 230);
+      --focus: oklch(70% 0.13 230);
+      --ambient-a: oklch(70% 0.13 252);
+      --ambient-b: oklch(82% 0.08 190);
+      --ambient-c: oklch(78% 0.06 285);
+      --reveal-edge: oklch(96% 0.018 230);
+      --shadow: 0 12px 28px color-mix(in oklch, var(--text-primary) 14%, transparent);
+      --font: "Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --window-radius: 2px;
+      --card-radius: 0px;
+      --control-radius: 0px;
+      --row-height: 46px;
+      --window-pad: 14px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        color-scheme: dark;
+        --bg: oklch(18% 0.012 255);
+        --surface: oklch(23% 0.012 255);
+        --surface-raised: oklch(27% 0.012 255);
+        --text-primary: oklch(94% 0.004 255);
+        --text-secondary: oklch(72% 0.01 255);
+        --accent: oklch(68% 0.15 252);
+        --accent-contrast: oklch(16% 0.012 255);
+        --separator: oklch(34% 0.012 255);
+        --reveal: oklch(82% 0.09 230);
+        --reveal-edge: oklch(92% 0.024 230);
+        --ambient-a: oklch(58% 0.13 252);
+        --ambient-b: oklch(56% 0.09 190);
+        --ambient-c: oklch(62% 0.08 285);
+        --shadow: 0 12px 28px color-mix(in oklch, black 40%, transparent);
+      }
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: oklch(18% 0.012 255);
+      --surface: oklch(23% 0.012 255);
+      --surface-raised: oklch(27% 0.012 255);
+      --text-primary: oklch(94% 0.004 255);
+      --text-secondary: oklch(72% 0.01 255);
+      --accent: oklch(68% 0.15 252);
+      --accent-contrast: oklch(16% 0.012 255);
+      --separator: oklch(34% 0.012 255);
+      --reveal: oklch(82% 0.09 230);
+      --reveal-edge: oklch(92% 0.024 230);
+      --ambient-a: oklch(58% 0.13 252);
+      --ambient-b: oklch(56% 0.09 190);
+      --ambient-c: oklch(62% 0.08 285);
+      --shadow: 0 12px 28px color-mix(in oklch, black 40%, transparent);
+    }
+
+    * { box-sizing: border-box; }
+    html { min-height: 100%; background: var(--bg); }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text-primary);
+      font: 13px/1.35 var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    svg { display: block; }
+
+    .window {
+      position: relative;
+      isolation: isolate;
+      width: 100%;
+      height: 100vh;
+      min-height: 460px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 16% 34%, color-mix(in oklch, var(--ambient-b) 18%, transparent), transparent 34%),
+        radial-gradient(ellipse at 6% 82%, color-mix(in oklch, var(--ambient-c) 15%, transparent), transparent 30%),
+        linear-gradient(color-mix(in oklch, var(--surface) 90%, transparent), color-mix(in oklch, var(--surface) 82%, transparent));
+      border: 1px solid var(--separator);
+      border-radius: 0;
+      box-shadow: none;
+      backdrop-filter: blur(18px) saturate(1.2);
+    }
+
+    .window::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 520px 300px at 82% 8%, color-mix(in oklch, var(--ambient-a) 48%, transparent), transparent 64%),
+        radial-gradient(ellipse 440px 330px at 10% 18%, color-mix(in oklch, var(--ambient-b) 42%, transparent), transparent 66%),
+        radial-gradient(ellipse 560px 300px at 72% 92%, color-mix(in oklch, var(--ambient-c) 36%, transparent), transparent 68%);
+      opacity: .96;
+    }
+
+    :root[data-theme="dark"] .window::before {
+      background:
+        radial-gradient(ellipse 460px 260px at 82% 8%, color-mix(in oklch, var(--ambient-a) 32%, transparent), transparent 64%),
+        radial-gradient(ellipse 390px 300px at 10% 18%, color-mix(in oklch, var(--ambient-b) 28%, transparent), transparent 66%),
+        radial-gradient(ellipse 520px 260px at 72% 92%, color-mix(in oklch, var(--ambient-c) 24%, transparent), transparent 68%);
+      opacity: .86;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) .window::before {
+        background:
+          radial-gradient(ellipse 460px 260px at 82% 8%, color-mix(in oklch, var(--ambient-a) 32%, transparent), transparent 64%),
+          radial-gradient(ellipse 390px 300px at 10% 18%, color-mix(in oklch, var(--ambient-b) 28%, transparent), transparent 66%),
+          radial-gradient(ellipse 520px 260px at 72% 92%, color-mix(in oklch, var(--ambient-c) 24%, transparent), transparent 68%);
+        opacity: .86;
+      }
+    }
+
+    .titlebar {
+      position: relative;
+      z-index: 1;
+      height: 38px;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      padding: 0 var(--window-pad);
+      border-bottom: 1px solid var(--separator);
+      background:
+        radial-gradient(circle at 18% 10%, color-mix(in oklch, white 20%, transparent), transparent 26%),
+        color-mix(in oklch, var(--surface-raised) 72%, transparent);
+    }
+
+    .traffic { display: flex; gap: 8px; }
+    .traffic span {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--separator);
+      border: 1px solid color-mix(in oklch, var(--text-primary) 11%, transparent);
+    }
+
+    .titlebar-title { color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+    .titlebar-actions,
+    .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+
+    .brand-lockup {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      flex: 0 0 auto;
+      color: var(--accent);
+      filter: drop-shadow(0 5px 12px color-mix(in oklch, var(--accent) 18%, transparent));
+    }
+
+    .brand-mark.small {
+      width: 18px;
+      height: 18px;
+      filter: none;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .icon-link,
+    .theme-toggle {
+      --reveal-x: 50%;
+      --reveal-y: 50%;
+      --edge-top: 0;
+      --edge-right: 0;
+      --edge-bottom: 0;
+      --edge-left: 0;
+      position: relative;
+      overflow: hidden;
+      min-width: 32px;
+      min-height: 32px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--separator);
+      border-radius: var(--control-radius);
+      background: color-mix(in oklch, var(--surface-raised) 86%, transparent);
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+
+    .theme-toggle {
+      grid-template-columns: auto 46px;
+      gap: 8px;
+      padding: 0 7px 0 10px;
+    }
+
+    .theme-toggle-label { font-size: 12px; color: var(--text-primary); }
+
+    .theme-slider {
+      position: relative;
+      width: 46px;
+      height: 22px;
+      border: 1px solid var(--separator);
+      border-radius: 11px;
+      background: color-mix(in oklch, var(--text-secondary) 12%, var(--surface));
+      box-shadow: inset 0 1px 2px color-mix(in oklch, var(--text-primary) 12%, transparent);
+    }
+
+    .theme-slider::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--surface-raised);
+      box-shadow: 0 1px 3px color-mix(in oklch, var(--text-primary) 24%, transparent);
+      transition: transform 160ms cubic-bezier(.16, 1, .3, 1), background 160ms ease;
+    }
+
+    .theme-toggle[aria-pressed="true"] .theme-slider {
+      background: color-mix(in oklch, var(--accent) 68%, var(--surface));
+      border-color: color-mix(in oklch, var(--accent) 72%, var(--separator));
+    }
+
+    .theme-toggle[aria-pressed="true"] .theme-slider::after {
+      transform: translateX(24px);
+      background: var(--accent-contrast);
+    }
+
+    .icon-link::before,
+    .theme-toggle::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      background:
+        radial-gradient(circle at var(--reveal-x) var(--reveal-y), color-mix(in oklch, var(--reveal) 16%, transparent), transparent 44%),
+        linear-gradient(color-mix(in oklch, var(--reveal) 5%, transparent), color-mix(in oklch, var(--reveal) 2%, transparent));
+      box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-top) * 52%), transparent),
+        inset -1px 0 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-right) * 52%), transparent),
+        inset 0 -1px 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-bottom) * 52%), transparent),
+        inset 1px 0 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-left) * 52%), transparent);
+      transition: opacity 120ms ease;
+    }
+
+    .icon-link:hover::before,
+    .icon-link:focus-visible::before,
+    .theme-toggle:hover::before,
+    .theme-toggle:focus-visible::before { opacity: 1; }
+
+    .icon-link[data-pressed="true"],
+    .theme-toggle[data-pressed="true"] { background: color-mix(in oklch, var(--text-primary) 8%, var(--surface-raised)); }
+
+    .icon-link > *,
+    .theme-toggle > * { position: relative; z-index: 1; }
+
+    .icon-link:focus-visible,
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      overflow: auto;
+      padding: var(--window-pad);
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+      font-weight: 650;
+    }
+
+    .intro {
+      margin: 3px 0 0;
+      max-width: 58ch;
+      color: var(--text-secondary);
+    }
+
+    .section { display: grid; gap: 6px; }
+    .section h2 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .section-note { margin: 0; color: var(--text-secondary); max-width: 62ch; }
+
+    .group {
+      overflow: hidden;
+      background: transparent;
+      border-block: 1px solid var(--separator);
+      border-inline: 0;
+      border-radius: var(--card-radius);
+    }
+
+    .scroll-list {
+      max-height: clamp(280px, 66vh, 540px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    .scroll-list::-webkit-scrollbar { width: 11px; }
+    .scroll-list::-webkit-scrollbar-track { background: transparent; }
+    .scroll-list::-webkit-scrollbar-thumb {
+      background: color-mix(in oklch, var(--text-secondary) 34%, transparent);
+      border: 3px solid transparent;
+      background-clip: padding-box;
+      border-radius: 0;
+    }
+    .scroll-list::-webkit-scrollbar-thumb:hover { background: color-mix(in oklch, var(--text-secondary) 48%, transparent); }
+
+    .row {
+      --reveal-x: 50%;
+      --reveal-y: 50%;
+      --edge-top: 0;
+      --edge-right: 0;
+      --edge-bottom: 0;
+      --edge-left: 0;
+      min-height: var(--row-height);
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--separator);
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .row:last-child { border-bottom: 0; }
+    .row { position: relative; }
+    .row > * { position: relative; z-index: 1; }
+    .row[data-selected="true"] {
+      background: color-mix(in oklch, var(--accent) 4%, transparent);
+    }
+    .row::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      background:
+        radial-gradient(circle at var(--reveal-x) var(--reveal-y), color-mix(in oklch, var(--reveal) 18%, transparent), transparent 38%),
+        linear-gradient(color-mix(in oklch, var(--reveal) 3%, transparent), transparent);
+      box-shadow:
+        inset 0 1px 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-top) * 60%), transparent),
+        inset -1px 0 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-right) * 60%), transparent),
+        inset 0 -1px 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-bottom) * 60%), transparent),
+        inset 1px 0 0 color-mix(in oklch, var(--reveal-edge) calc(var(--edge-left) * 60%), transparent);
+      transition: opacity 120ms ease;
+    }
+    .row::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      background: var(--accent);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .row[data-selected="true"]::after { opacity: 1; }
+    .row:hover::before, .row:focus-within::before { opacity: 1; }
+    .row[data-pressed="true"] { background: color-mix(in oklch, var(--text-primary) 3%, transparent); }
+
+    .app-icon {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      border-radius: var(--control-radius);
+      background: color-mix(in oklch, var(--accent) 7%, var(--surface));
+      color: var(--accent);
+      border: 1px solid color-mix(in oklch, var(--accent) 18%, var(--separator));
+    }
+
+    .row-title { display: block; font-weight: 520; }
+    .row-sub { display: block; margin-top: 1px; color: var(--text-secondary); font-size: 12px; }
+
+    .check {
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      appearance: none;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--separator);
+      border-radius: var(--control-radius);
+      background: var(--surface);
+    }
+
+    .check:checked { background: var(--accent); border-color: var(--accent); }
+    .check:checked::after {
+      content: "";
+      width: 9px;
+      height: 5px;
+      border-left: 2px solid var(--accent-contrast);
+      border-bottom: 2px solid var(--accent-contrast);
+      transform: rotate(-45deg) translateY(-1px);
+    }
+
+    .switch {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      margin: 0;
+      appearance: none;
+      border: 1px solid var(--separator);
+      border-radius: 10px;
+      background: var(--separator);
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--surface-raised);
+      box-shadow: 0 1px 2px color-mix(in oklch, var(--text-primary) 20%, transparent);
+      transition: transform 140ms ease;
+    }
+
+    .switch:checked { background: var(--accent); border-color: var(--accent); }
+    .switch:checked::after { transform: translateX(18px); }
+
+    .shortcut-control {
+      width: min(220px, 34vw);
+      height: 32px;
+      padding: 0 10px;
+      color: var(--text-primary);
+      background: var(--surface);
+      border: 1px solid var(--separator);
+      border-radius: var(--control-radius);
+    }
+
+    .check:focus-visible, .switch:focus-visible, .shortcut-control:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    @media (max-width: 560px) {
+      body { padding: 0; place-items: stretch; }
+      .window { width: 100%; height: 100vh; min-height: 100vh; border-radius: 0; border-inline: 0; }
+      .titlebar { display: none; }
+      .header-top { align-items: flex-start; }
+      .theme-toggle-label { display: none; }
+      .theme-toggle { grid-template-columns: 46px; padding-inline: 6px; }
+      .scroll-list { max-height: clamp(250px, 62vh, 480px); }
+      .row { grid-template-columns: auto 1fr; }
+      .row > .check, .row > .switch, .row > .shortcut-control { grid-column: 2; justify-self: start; }
+      .shortcut-control { width: 100%; max-width: 260px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="window" data-od-id="settings-window" aria-label="Окно настроек">
+    <div class="titlebar" data-od-id="settings-titlebar">
+      <div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="titlebar-title">WindowsWindows</div>
+      <div class="titlebar-actions"></div>
+    </div>
+
+    <div class="content" data-od-id="settings-content">
+      <header data-od-id="settings-header">
+        <div class="header-top">
+          <div class="brand-lockup" data-od-id="brand-lockup">
+            <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+              <rect x="4" y="5" width="13" height="9" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <rect x="12" y="9" width="13" height="9" fill="none" stroke="currentColor" stroke-width="1.7" opacity=".72"/>
+              <path d="M7 8h7M15 12h7" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+              <rect x="5" y="22" width="5" height="5" fill="currentColor" opacity=".95"/>
+              <rect x="13.5" y="22" width="5" height="5" fill="currentColor" opacity=".78"/>
+              <rect x="22" y="22" width="5" height="5" fill="currentColor" opacity=".58"/>
+              <path d="M10.5 18.5 8 21.4M16.5 18.5 16 21.4M22.5 18.5 24.5 21.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="square" opacity=".72"/>
+            </svg>
+            <h1 data-od-id="settings-title">WindowsWindows</h1>
+          </div>
+          <div class="header-actions">
+            <a class="icon-link" href="#" aria-label="Открыть GitHub проекта" data-od-id="github-link">
+              <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.2-3.37-1.2-.45-1.15-1.1-1.46-1.1-1.46-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.1.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02A9.58 9.58 0 0 1 12 6.99c.85 0 1.7.11 2.5.34 1.9-1.29 2.74-1.02 2.74-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.58 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86v2.58c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+            </a>
+            <button class="theme-toggle" type="button" aria-label="Переключить тему" data-od-id="theme-toggle">
+              <span class="theme-toggle-label">Тема</span>
+              <span class="theme-slider" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+        <p class="intro">Выберите приложения-исключения и задайте базовое поведение программы.</p>
+      </header>
+
+      <section class="section" data-od-id="exceptions-section">
+        <div>
+          <h2 data-od-id="exceptions-title">Приложения-исключения</h2>
+          <p class="section-note">Отмеченные приложения не будут обрабатываться программой.</p>
+        </div>
+        <div class="group scroll-list" data-od-id="exceptions-list">
+          <label class="row" data-selected="true" data-od-id="exception-safari">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="m14.8 7.2-2.1 5.5-5.5 2.1 2.1-5.5 5.5-2.1Z"/></svg>
+            </span>
+            <span><span class="row-title">Safari</span><span class="row-sub">Браузер</span></span>
+            <input class="check" type="checkbox" checked aria-label="Исключить Safari" />
+          </label>
+          <label class="row" data-od-id="exception-telegram">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 12 20 5l-4 14-4-5-4 3 1-5Z"/></svg>
+            </span>
+            <span><span class="row-title">Telegram</span><span class="row-sub">Сообщения</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Telegram" />
+          </label>
+          <label class="row" data-selected="true" data-od-id="exception-vscode">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 8 4 12l4 4M16 8l4 4-4 4M14 5l-4 14"/></svg>
+            </span>
+            <span><span class="row-title">Visual Studio Code</span><span class="row-sub">Разработка</span></span>
+            <input class="check" type="checkbox" checked aria-label="Исключить Visual Studio Code" />
+          </label>
+          <label class="row" data-od-id="exception-chrome">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>
+            </span>
+            <span><span class="row-title">Chrome</span><span class="row-sub">Браузер</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Chrome" />
+          </label>
+          <label class="row" data-od-id="exception-figma">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="7" r="3"/><circle cx="15" cy="7" r="3"/><circle cx="9" cy="12" r="3"/><circle cx="15" cy="12" r="3"/><circle cx="9" cy="17" r="3"/></svg>
+            </span>
+            <span><span class="row-title">Figma</span><span class="row-sub">Дизайн</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Figma" />
+          </label>
+          <label class="row" data-od-id="exception-slack">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 4v8M16 12v8M4 8h8M12 16h8"/><path d="M8 16h.01M16 8h.01"/></svg>
+            </span>
+            <span><span class="row-title">Slack</span><span class="row-sub">Командная работа</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Slack" />
+          </label>
+          <label class="row" data-selected="true" data-od-id="exception-terminal">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="6" width="16" height="12"/><path d="m7 10 3 2-3 2M12 15h5"/></svg>
+            </span>
+            <span><span class="row-title">Terminal</span><span class="row-sub">Командная строка</span></span>
+            <input class="check" type="checkbox" checked aria-label="Исключить Terminal" />
+          </label>
+          <label class="row" data-od-id="exception-finder">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 6h14v12H5zM12 6v12M8 10h.01M16 10h.01M8 15c1.4 1 6.6 1 8 0"/></svg>
+            </span>
+            <span><span class="row-title">Finder</span><span class="row-sub">Файлы</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Finder" />
+          </label>
+          <label class="row" data-od-id="exception-preview">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="4" width="12" height="16"/><path d="M8 8h6M8 12h6M8 16h4M17 8l2-2"/></svg>
+            </span>
+            <span><span class="row-title">Preview</span><span class="row-sub">Документы</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Preview" />
+          </label>
+          <label class="row" data-od-id="exception-notion">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="5" width="14" height="14"/><path d="M9 16V8l6 8V8"/></svg>
+            </span>
+            <span><span class="row-title">Notion</span><span class="row-sub">Заметки</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Notion" />
+          </label>
+          <label class="row" data-od-id="exception-obsidian">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 4h8l4 7-8 9-8-9 4-7Z"/><path d="M8 4l4 16 4-16"/></svg>
+            </span>
+            <span><span class="row-title">Obsidian</span><span class="row-sub">База знаний</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Obsidian" />
+          </label>
+          <label class="row" data-od-id="exception-music">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 17V6l9-2v11"/><circle cx="7" cy="17" r="2"/><circle cx="16" cy="15" r="2"/></svg>
+            </span>
+            <span><span class="row-title">Music</span><span class="row-sub">Медиа</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Music" />
+          </label>
+          <label class="row" data-od-id="exception-photoshop">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="14"/><path d="M8 15V9h3a2 2 0 0 1 0 4H8M14 15c1.5.7 3 .3 3-.8 0-1.7-3-1-3-3 0-1.2 1.6-1.7 3-.9"/></svg>
+            </span>
+            <span><span class="row-title">Photoshop</span><span class="row-sub">Графика</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Photoshop" />
+          </label>
+          <label class="row" data-od-id="exception-zoom">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="8" width="11" height="8"/><path d="m15 11 5-3v8l-5-3"/></svg>
+            </span>
+            <span><span class="row-title">Zoom</span><span class="row-sub">Видеосвязь</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Zoom" />
+          </label>
+          <label class="row" data-od-id="exception-mail">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="6" width="16" height="12"/><path d="m4 8 8 5 8-5"/></svg>
+            </span>
+            <span><span class="row-title">Mail</span><span class="row-sub">Почта</span></span>
+            <input class="check" type="checkbox" aria-label="Исключить Mail" />
+          </label>
+        </div>
+      </section>
+
+      <section class="section" data-od-id="general-section">
+        <h2 data-od-id="general-title">Настройки</h2>
+        <div class="group" data-od-id="general-settings">
+          <label class="row" data-od-id="launch-on-startup-row">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </span>
+            <span><span class="row-title">Запускать при включении</span><span class="row-sub">Программа стартует вместе с системой.</span></span>
+            <input class="switch" type="checkbox" checked aria-label="Запускать при включении" />
+          </label>
+          <label class="row" data-od-id="minimize-on-repeat-row">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="5" width="14" height="10"/><path d="M8 19h8M9 9h6M12 15v4"/></svg>
+            </span>
+            <span><span class="row-title">Повторное нажатие на окно сворачивает его</span><span class="row-sub">Клик по уже активной Dock-иконке прячет выбранное окно.</span></span>
+            <input class="switch" type="checkbox" checked aria-label="Повторное нажатие на окно сворачивает его" data-od-id="minimize-on-repeat-switch" />
+          </label>
+          <label class="row" data-od-id="shortcut-row">
+            <span class="app-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="7" width="16" height="10" rx="2"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M8 14h8"/></svg>
+            </span>
+            <span><span class="row-title">Сочетание клавиш</span><span class="row-sub">Стандартное: ⌘⇧P. Можно назначить своё.</span></span>
+            <input class="shortcut-control" type="text" value="⌘⇧P" aria-label="Назначить сочетание клавиш" />
+          </label>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const root = document.documentElement;
+    const savedTheme = localStorage.getItem('windowswindows-theme');
+    if (savedTheme === 'light' || savedTheme === 'dark') root.dataset.theme = savedTheme;
+
+    const themeToggle = document.querySelector('[data-od-id="theme-toggle"]');
+    const setThemeButtonState = () => {
+      const isDark = root.dataset.theme
+        ? root.dataset.theme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      themeToggle?.setAttribute('aria-pressed', String(isDark));
+      themeToggle?.setAttribute('title', isDark ? 'Включить светлую тему' : 'Включить тёмную тему');
+    };
+
+    themeToggle?.addEventListener('click', () => {
+      const isDark = root.dataset.theme
+        ? root.dataset.theme === 'dark'
+        : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const nextTheme = isDark ? 'light' : 'dark';
+      root.dataset.theme = nextTheme;
+      localStorage.setItem('windowswindows-theme', nextTheme);
+      setThemeButtonState();
+    });
+    setThemeButtonState();
+
+    const revealTargets = document.querySelectorAll('.row, .icon-link, .theme-toggle');
+    const maxRevealDistance = 56;
+    const edgeStrength = (distance) => {
+      const clamped = Math.max(0, Math.min(1, 1 - distance / maxRevealDistance));
+      return Number((clamped * clamped).toFixed(3));
+    };
+
+    const setRevealPoint = (element, event) => {
+      const rect = element.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      element.style.setProperty('--reveal-x', `${x}px`);
+      element.style.setProperty('--reveal-y', `${y}px`);
+      element.style.setProperty('--edge-top', edgeStrength(y));
+      element.style.setProperty('--edge-right', edgeStrength(rect.width - x));
+      element.style.setProperty('--edge-bottom', edgeStrength(rect.height - y));
+      element.style.setProperty('--edge-left', edgeStrength(x));
+      return { x, y };
+    };
+
+    revealTargets.forEach((element) => {
+      element.addEventListener('pointermove', (event) => setRevealPoint(element, event));
+      element.addEventListener('pointerdown', (event) => {
+        setRevealPoint(element, event);
+        element.dataset.pressed = 'true';
+      });
+      element.addEventListener('pointerup', () => delete element.dataset.pressed);
+      element.addEventListener('pointercancel', () => delete element.dataset.pressed);
+      element.addEventListener('pointerleave', () => delete element.dataset.pressed);
+    });
+
+    document.querySelectorAll('.row .check').forEach((checkbox) => {
+      const row = checkbox.closest('.row');
+      const syncSelection = () => row.dataset.selected = String(checkbox.checked);
+      checkbox.addEventListener('change', syncSelection);
+      syncSelection();
+    });
+  </script>
+</body>
+</html>

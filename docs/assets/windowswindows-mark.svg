@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">WindowsWindows</title>
+  <desc id="desc">Overlapping windows connected to individual Dock tiles.</desc>
+  <rect width="256" height="256" fill="#101820"/>
+  <g fill="none" stroke="#48a0ff" stroke-width="12" stroke-linejoin="miter">
+    <rect x="34" y="38" width="112" height="76"/>
+    <rect x="102" y="72" width="112" height="76" opacity=".78"/>
+  </g>
+  <g fill="#48a0ff">
+    <rect x="30" y="188" width="44" height="44"/>
+    <rect x="106" y="188" width="44" height="44" opacity=".8"/>
+    <rect x="182" y="188" width="44" height="44" opacity=".62"/>
+  </g>
+  <g fill="none" stroke="#48a0ff" stroke-width="10" stroke-linecap="square" opacity=".82">
+    <path d="M68 148 52 180"/>
+    <path d="M128 148v32"/>
+    <path d="m188 148 16 32"/>
+  </g>
+</svg>

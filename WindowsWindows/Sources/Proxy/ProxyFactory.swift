@@ -41,6 +41,7 @@ public final class ProxyFactory: @unchecked Sendable {
 
     private let proxyAppsURL: URL
     private let proxyBinaryURL: URL
+    private let mainSessionToken: String
     private let fileManager = FileManager.default
 
     /// Running proxy handles, чтобы управлять их жизненным циклом.
@@ -54,9 +55,10 @@ public final class ProxyFactory: @unchecked Sendable {
     private let lock = NSLock()
     private let bundleMutationLock = NSRecursiveLock()
 
-    public init(proxyAppsURL: URL, proxyBinaryURL: URL) {
+    public init(proxyAppsURL: URL, proxyBinaryURL: URL, mainSessionToken: String = UUID().uuidString) {
         self.proxyAppsURL = proxyAppsURL
         self.proxyBinaryURL = proxyBinaryURL
+        self.mainSessionToken = mainSessionToken
     }
 
     /// Создать/обновить бандл и запустить прокси если не running.
@@ -232,7 +234,8 @@ public final class ProxyFactory: @unchecked Sendable {
         let displayName = presentation.displayName
 
         guard let bundleVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
-              let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String else {
+              let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+              let mainIdentity = ProcessIdentity.live(processIdentifier: ProcessInfo.processInfo.processIdentifier) else {
             throw NSError(domain: "ProxyFactory", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Main bundle version metadata is missing or invalid"
             ])
@@ -261,6 +264,9 @@ public final class ProxyFactory: @unchecked Sendable {
             "WWAppName": window.appName,
             "WWTitle": window.title,
             "WWMainPID": Int(ProcessInfo.processInfo.processIdentifier),
+            "WWMainProcessStartSeconds": mainIdentity.startTimeSeconds,
+            "WWMainProcessStartMicroseconds": mainIdentity.startTimeMicroseconds,
+            "WWMainSessionToken": mainSessionToken,
         ]
         return try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
     }

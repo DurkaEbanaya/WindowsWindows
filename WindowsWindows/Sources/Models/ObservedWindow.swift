@@ -35,6 +35,10 @@ public struct ProcessIdentity: Hashable, Sendable {
             startTimeMicroseconds: UInt64(info.pbi_start_tvusec)
         )
     }
+
+    public var isLiveProcess: Bool {
+        Self.live(processIdentifier: processIdentifier) == self
+    }
 }
 
 /// Одно отслеживаемое окно чужого приложения.

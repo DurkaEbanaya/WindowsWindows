@@ -18,7 +18,7 @@ final class ConfigurationContractTests: XCTestCase {
         }
     }
 
-    func testVersion1ConfigurationMigratesAndPersistsVersion2() throws {
+    func testVersion1ConfigurationMigratesIntoDefaultWorkspaceProfile() throws {
         let version1 = """
         {
           "scopeMode": "onlyListed",
@@ -37,7 +37,124 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertEqual(config.snapshotInterval, 0.25)
         let persisted = try JSONSerialization.jsonObject(with: Data(contentsOf: store.configURL))
         let dictionary = try XCTUnwrap(persisted as? [String: Any])
-        XCTAssertEqual(dictionary["schemaVersion"] as? Int, ShelfConfig.currentSchemaVersion)
+        XCTAssertEqual(dictionary["schemaVersion"] as? Int, WorkspaceConfig.currentSchemaVersion)
+        XCTAssertEqual(dictionary["activeProfileID"] as? String, WorkspaceConfig.defaultProfileID)
+        let profiles = try XCTUnwrap(dictionary["profiles"] as? [[String: Any]])
+        XCTAssertEqual(profiles.count, 1)
+        XCTAssertEqual(profiles.first?["id"] as? String, WorkspaceConfig.defaultProfileID)
+    }
+
+    func testWorkspaceCompatibilityUpdateMutatesOnlyActiveProfile() throws {
+        let workspace = WorkspaceConfig(activeProfileID: "work", profiles: [
+            WorkspaceProfile(
+                id: "default",
+                name: "Default",
+                shelfConfig: ShelfConfig(scopeMode: .allExceptListed, bundleIdentifiers: ["com.default"])
+            ),
+            WorkspaceProfile(
+                id: "work",
+                name: "Work",
+                shelfConfig: ShelfConfig(scopeMode: .onlyListed, bundleIdentifiers: ["com.old"])
+            ),
+        ])
+        try store.saveWorkspace(workspace)
+
+        let active = try store.update { config in
+            config.bundleIdentifiers = ["com.new"]
+        }
+
+        XCTAssertEqual(active.bundleIdentifiers, ["com.new"])
+        let reloaded = try store.loadWorkspace()
+        XCTAssertEqual(reloaded.activeProfileID, "work")
+        XCTAssertEqual(reloaded.profiles.first { $0.id == "default" }?.shelfConfig.bundleIdentifiers, ["com.default"])
+        XCTAssertEqual(reloaded.profiles.first { $0.id == "work" }?.shelfConfig.bundleIdentifiers, ["com.new"])
+    }
+
+    func testWorkspaceAssignsNewWindowsToActiveProfileAndPrunesClosedWindows() throws {
+        let first = WindowKey(appPID: 10, windowNumber: 1)
+        let second = WindowKey(appPID: 10, windowNumber: 2)
+        var workspace = WorkspaceConfig(activeProfileID: "work", profiles: [
+            WorkspaceProfile(
+                id: "default",
+                name: "Default",
+                shelfConfig: .default,
+                windowKeys: [first.stringValue]
+            ),
+            WorkspaceProfile(id: "work", name: "Work", shelfConfig: .default),
+        ])
+
+        XCTAssertTrue(try workspace.assignNewWindowsToActiveProfile([first, second]))
+
+        XCTAssertEqual(workspace.profiles.first { $0.id == "default" }?.windowKeys, [first.stringValue])
+        XCTAssertEqual(workspace.profiles.first { $0.id == "work" }?.windowKeys, [second.stringValue])
+        XCTAssertEqual(workspace.activeWindowKeySet(), [second])
+
+        XCTAssertTrue(try workspace.assignNewWindowsToActiveProfile([second]))
+        XCTAssertEqual(workspace.profiles.first { $0.id == "default" }?.windowKeys, [])
+        XCTAssertEqual(workspace.profiles.first { $0.id == "work" }?.windowKeys, [second.stringValue])
+    }
+
+    func testWorkspaceUpdateConfigUsesVerifiedGitHubReleasesEndpoint() throws {
+        let updates = WorkspaceUpdateConfig.default
+
+        XCTAssertEqual(
+            updates.releasesAPIURL.absoluteString,
+            "https://api.github.com/repos/DurkaEbanaya/WindowsWindows/releases"
+        )
+        XCTAssertEqual(
+            updates.sparkleAppcastURL.absoluteString,
+            "https://durkaebanaya.github.io/WindowsWindows/appcast.xml"
+        )
+    }
+
+    func testWorkspaceBehaviorAndAppearanceDefaultsAreMigrated() throws {
+        let version2 = """
+        {
+          "schemaVersion": 2,
+          "scopeMode": "allExceptListed",
+          "bundleIdentifiers": [],
+          "refreshInterval": 2,
+          "snapshotInterval": 5
+        }
+        """
+        try Data(version2.utf8).write(to: store.configURL)
+
+        let workspace = try store.loadWorkspace()
+
+        XCTAssertTrue(workspace.behavior.minimizeOnRepeatClick)
+        XCTAssertEqual(workspace.appearance.theme, .system)
+        let persisted = try JSONSerialization.jsonObject(with: Data(contentsOf: store.configURL))
+        let dictionary = try XCTUnwrap(persisted as? [String: Any])
+        XCTAssertNotNil(dictionary["behavior"])
+        XCTAssertNotNil(dictionary["appearance"])
+    }
+
+    func testInvalidWorkspaceIsNotOverwritten() throws {
+        let invalid = Data("""
+        {
+          "schemaVersion": 3,
+          "activeProfileID": "missing",
+          "profiles": [
+            {
+              "id": "default",
+              "name": "Default",
+              "shelfConfig": {
+                "schemaVersion": 2,
+                "scopeMode": "allExceptListed",
+                "bundleIdentifiers": [],
+                "refreshInterval": 2,
+                "snapshotInterval": 5
+              }
+            }
+          ]
+        }
+        """.utf8)
+        try invalid.write(to: store.configURL)
+
+        XCTAssertThrowsError(try store.loadWorkspace()) { error in
+            XCTAssertEqual(error as? WorkspaceConfigValidationError, .activeProfileMissing("missing"))
+        }
+        XCTAssertEqual(try Data(contentsOf: store.configURL), invalid)
     }
 
     func testMalformedConfigurationIsNotOverwritten() throws {
@@ -126,6 +243,7 @@ final class ConfigurationContractTests: XCTestCase {
         let first = try XCTUnwrap(ProcessIdentity.live(processIdentifier: pid))
         let second = try XCTUnwrap(ProcessIdentity.live(processIdentifier: pid))
         XCTAssertEqual(first, second)
+        XCTAssertTrue(first.isLiveProcess)
         XCTAssertNotEqual(
             first,
             ProcessIdentity(
@@ -134,6 +252,21 @@ final class ConfigurationContractTests: XCTestCase {
                 startTimeMicroseconds: first.startTimeMicroseconds
             )
         )
+        XCTAssertFalse(
+            ProcessIdentity(
+                processIdentifier: pid,
+                startTimeSeconds: first.startTimeSeconds + 1,
+                startTimeMicroseconds: first.startTimeMicroseconds
+            )?.isLiveProcess ?? true
+        )
+    }
+
+    func testMainInstanceLockIsExclusiveForProcessLifetime() throws {
+        let lockURL = rootURL.appendingPathComponent("main.lock", isDirectory: false)
+
+        let first = try XCTUnwrap(MainInstanceLock.acquire(lockURL: lockURL))
+        XCTAssertNil(try MainInstanceLock.acquire(lockURL: lockURL))
+        _ = first
     }
 
     func testFactoryRemovesMalformedOwnedBundles() throws {
@@ -156,29 +289,35 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: malformedBundle.path))
     }
 
-    func testProxyIPCParsesLegacyActivationWithoutAction() throws {
+    func testProxyIPCRejectsLegacyActivationWithoutSessionToken() throws {
         let key = WindowKey(appPID: 123, windowNumber: 456)
 
-        let message = try XCTUnwrap(ProxyIPCMessage(userInfo: [
+        XCTAssertNil(ProxyIPCMessage(userInfo: [
             ProxyIPC.windowKeyUserInfoKey: key.stringValue
-        ]))
-
-        XCTAssertEqual(message, ProxyIPCMessage(action: .activate, windowKey: key))
+        ], expectedSessionToken: "expected"))
     }
 
     func testProxyIPCParsesExplicitCloseActionAndRejectsUnknownActions() throws {
         let key = WindowKey(appPID: 123, windowNumber: 456)
+        let token = UUID().uuidString
 
         let message = try XCTUnwrap(ProxyIPCMessage(userInfo: [
             ProxyIPC.windowKeyUserInfoKey: key.stringValue,
             ProxyIPC.actionUserInfoKey: ProxyIPCAction.close.rawValue,
-        ]))
+            ProxyIPC.sessionTokenUserInfoKey: token,
+        ], expectedSessionToken: token))
 
         XCTAssertEqual(message, ProxyIPCMessage(action: .close, windowKey: key))
         XCTAssertNil(ProxyIPCMessage(userInfo: [
             ProxyIPC.windowKeyUserInfoKey: key.stringValue,
             ProxyIPC.actionUserInfoKey: "delete-everything",
-        ]))
+            ProxyIPC.sessionTokenUserInfoKey: token,
+        ], expectedSessionToken: token))
+        XCTAssertNil(ProxyIPCMessage(userInfo: [
+            ProxyIPC.windowKeyUserInfoKey: key.stringValue,
+            ProxyIPC.actionUserInfoKey: ProxyIPCAction.activate.rawValue,
+            ProxyIPC.sessionTokenUserInfoKey: "wrong",
+        ], expectedSessionToken: token))
     }
 
     func testCloseProxySuppressionIsBoundedAndClearsWhenWindowDisappears() {

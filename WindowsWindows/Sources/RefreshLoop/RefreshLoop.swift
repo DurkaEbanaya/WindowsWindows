@@ -50,6 +50,7 @@ public actor RefreshLoop {
     private var refreshInterval: TimeInterval = 2.0
     private var snapshotInterval: TimeInterval = 5.0
     private var lastKnownConfig: ShelfConfig?
+    private var lastKnownWorkspace: WorkspaceConfig?
     private var onWindowsUpdated: (@MainActor @Sendable ([WindowKey: ObservedWindow]) -> Void)?
     private var closeSuppressions = CloseProxySuppressionState()
 
@@ -67,7 +68,8 @@ public actor RefreshLoop {
 
     public func start() {
         guard timer == nil, !isShuttingDown else { return }
-        if let config = loadConfig() {
+        if let workspace = loadWorkspace() {
+            let config = workspace.effectiveShelfConfig
             refreshInterval = config.refreshInterval
             snapshotInterval = config.snapshotInterval
         }
@@ -96,8 +98,9 @@ public actor RefreshLoop {
     }
 
     public func resolveWindow(key: WindowKey) -> ObservedWindow? {
-        let config = loadConfig()
-        guard let config else { return nil }
+        let workspace = loadWorkspace()
+        guard let workspace else { return nil }
+        let config = workspace.effectiveShelfConfig
         let snapshot = discovery.discover(config: config)
         reconcileKnownWindows(with: snapshot)
         return lastKnownWindows[key]
@@ -122,8 +125,9 @@ public actor RefreshLoop {
     }
 
     private func performTick() async {
-        let config = loadConfig()
-        guard let config else { return }
+        let workspace = loadWorkspace()
+        guard var workspace else { return }
+        let config = workspace.effectiveShelfConfig
         refreshInterval = config.refreshInterval
         snapshotInterval = config.snapshotInterval
 
@@ -132,6 +136,19 @@ public actor RefreshLoop {
         let windowMap = Dictionary(uniqueKeysWithValues: windows.map { ($0.key, $0) })
         let validKeys = Set(windowMap.keys)
         reconcileKnownWindows(with: discoverySnapshot)
+        do {
+            if try workspace.assignNewWindowsToActiveProfile(validKeys) {
+                workspace = try configStore.updateWorkspace { stored in
+                    try stored.assignNewWindowsToActiveProfile(validKeys)
+                }
+                lastKnownWorkspace = workspace
+            }
+        } catch {
+            DiagnosticJournal.shared.log("workspace", "window_assignment_failed", fields: [
+                "error": error.localizedDescription
+            ])
+        }
+        let activeKeys = workspace.activeWindowKeySet()
         closeSuppressions.removeObservedKeys(validKeys, now: Date())
         let captureAuthorized = await snapshotter.isCaptureAuthorized
 
@@ -147,7 +164,7 @@ public actor RefreshLoop {
             Task { @MainActor in callback(knownWindows) }
         }
 
-        for window in windows {
+        for window in windows where activeKeys.contains(window.key) {
             guard !Task.isCancelled else { return }
             if closeSuppressions.isSuppressed(key: window.key, now: Date()) {
                 DiagnosticJournal.shared.log("proxy", "launch_suppressed_for_close", fields: [
@@ -188,8 +205,9 @@ public actor RefreshLoop {
         } catch {
             NSLog("ProxyFactory.removeInvalidProxyBundles failed: \(error.localizedDescription)")
         }
+        let projectedKeys = validKeys.intersection(activeKeys)
         let staleKeys = factory.existingProxies().filter { proxy in
-            return !validKeys.contains(proxy.key)
+            return !projectedKeys.contains(proxy.key)
                 && discoverySnapshot.isAbsenceAuthoritative(
                     for: proxy.key,
                     persistedProcessIdentity: proxy.processIdentity
@@ -234,17 +252,24 @@ public actor RefreshLoop {
         }
     }
 
-    private func loadConfig() -> ShelfConfig? {
+    private func loadWorkspace() -> WorkspaceConfig? {
         do {
-            let config = try configStore.load()
+            let workspace = try configStore.loadWorkspace()
+            let config = workspace.effectiveShelfConfig
+            lastKnownWorkspace = workspace
             lastKnownConfig = config
-            return config
+            return workspace
         } catch {
             DiagnosticJournal.shared.log("config", "load_failed", fields: [
                 "path": configStore.configURL.path,
                 "error": error.localizedDescription
             ])
-            return lastKnownConfig
+            if let lastKnownWorkspace { return lastKnownWorkspace }
+            return lastKnownConfig.map { config in
+                WorkspaceConfig(profiles: [
+                    WorkspaceProfile(id: WorkspaceConfig.defaultProfileID, name: "Default", shelfConfig: config)
+                ])
+            }
         }
     }
 

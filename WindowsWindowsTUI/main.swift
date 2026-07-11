@@ -203,41 +203,6 @@ private struct TerminalInput {
     }
 }
 
-private struct AppRow: Hashable {
-    let bundleIdentifier: String
-    let name: String
-    let isRunning: Bool
-}
-
-private enum AppCatalog {
-    static func load(configuredIDs: [String]) -> [AppRow] {
-        var rows: [String: AppRow] = [:]
-        for app in NSWorkspace.shared.runningApplications {
-            guard let id = app.bundleIdentifier, Policy.isUserConfigurable(bundleIdentifier: id) else { continue }
-            let name = app.localizedName ?? id
-            rows[id] = AppRow(bundleIdentifier: id, name: name, isRunning: true)
-        }
-        for id in configuredIDs where rows[id] == nil {
-            rows[id] = AppRow(bundleIdentifier: id, name: installedName(for: id) ?? id, isRunning: false)
-        }
-        return rows.values.sorted {
-            let comparison = $0.name.localizedCaseInsensitiveCompare($1.name)
-            return comparison == .orderedSame
-                ? $0.bundleIdentifier < $1.bundleIdentifier
-                : comparison == .orderedAscending
-        }
-    }
-
-    private static func installedName(for bundleIdentifier: String) -> String? {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
-            return nil
-        }
-        return Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
-            ?? Bundle(url: url)?.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? url.deletingPathExtension().lastPathComponent
-    }
-}
-
 private enum TUIError: LocalizedError {
     case notInteractive
     case endOfInput
@@ -264,7 +229,7 @@ private final class SettingsTUI {
     private let terminal: TerminalSession
     private var config: ShelfConfig
     private var loadedConfig: ShelfConfig
-    private var rows: [AppRow]
+    private var rows: [ApplicationCatalogRow]
     private var selectedIndex = 0
     private var status = ""
     private var isDirty = false
@@ -274,7 +239,7 @@ private final class SettingsTUI {
         self.terminal = terminal
         self.config = try store.load()
         self.loadedConfig = config
-        self.rows = AppCatalog.load(configuredIDs: config.bundleIdentifiers)
+        self.rows = ApplicationCatalog.load(configuredIDs: config.bundleIdentifiers)
     }
 
     func run() throws {
@@ -378,7 +343,7 @@ private final class SettingsTUI {
     private func reload() throws {
         config = try store.load()
         loadedConfig = config
-        rows = AppCatalog.load(configuredIDs: config.bundleIdentifiers)
+        rows = ApplicationCatalog.load(configuredIDs: config.bundleIdentifiers)
         selectedIndex = min(selectedIndex, max(0, rows.count - 1))
         isDirty = false
         status = "Reloaded from \(store.configURL.path)"
@@ -393,7 +358,7 @@ private final class SettingsTUI {
             current = desired
         }
         loadedConfig = config
-        rows = AppCatalog.load(configuredIDs: config.bundleIdentifiers)
+        rows = ApplicationCatalog.load(configuredIDs: config.bundleIdentifiers)
         isDirty = false
         status = "Saved; WindowsWindows will apply changes on its next refresh"
     }

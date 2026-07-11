@@ -1,5 +1,51 @@
 import Cocoa
 @preconcurrency import ApplicationServices
+import Darwin
+
+public final class MainInstanceLock: @unchecked Sendable {
+    private let descriptor: Int32
+
+    private init(descriptor: Int32) {
+        self.descriptor = descriptor
+    }
+
+    deinit {
+        flock(descriptor, LOCK_UN)
+        close(descriptor)
+    }
+
+    public static func acquire(lockURL: URL) throws -> MainInstanceLock? {
+        try FileManager.default.createDirectory(
+            at: lockURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let descriptor = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            let failure = errno
+            close(descriptor)
+            if failure == EWOULDBLOCK || failure == EAGAIN {
+                return nil
+            }
+            throw POSIXError(POSIXErrorCode(rawValue: failure) ?? .EIO)
+        }
+        return MainInstanceLock(descriptor: descriptor)
+    }
+
+    public static func defaultLockURL() throws -> URL {
+        let base = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        return base
+            .appendingPathComponent(ConfigStore.appName, isDirectory: true)
+            .appendingPathComponent("main.lock", isDirectory: false)
+    }
+}
 
 /// Координатор: связывает все модули воедино и управляет жизненным циклом.
 @MainActor
@@ -13,6 +59,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: WindowController!
     private var focusTracker: WindowFocusTracker!
     private var refreshLoop: RefreshLoop!
+    private var settingsWindowController: SettingsWindowController!
+    private let hotKeyController = GlobalHotKeyController()
+    private let updateCheckService = UpdateCheckService()
+    private var mainInstanceLock: MainInstanceLock?
+    private let mainSessionToken = UUID().uuidString
+    private var commandObserver: NSObjectProtocol?
 
     // Кэш текущих окон для обработки IPC-активаций.
     // Обновляется RefreshLoop.tick(). IPC-handler ищет здесь по windowKey.
@@ -20,6 +72,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let knownWindowsLock = NSLock()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
+        do {
+            guard let lock = try MainInstanceLock.acquire(lockURL: MainInstanceLock.defaultLockURL()) else {
+                NSLog("Another WindowsWindows instance is already running; exiting before mutating proxy state.")
+                MainAppCommandIPC.requestOpenSettings()
+                NSApp.terminate(nil)
+                return
+            }
+            mainInstanceLock = lock
+        } catch {
+            NSLog("Main instance lock failed: \(error.localizedDescription)")
+            NSApp.terminate(nil)
+            return
+        }
+
         // 1. Проверка Accessibility permission. Без него discovery AX-часть
         //    молча вернёт пусто, окно не будут иметь axWindow handle.
         //    Prompt показывается системой при первом AX-вызове, но мы
@@ -47,11 +113,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         factory = ProxyFactory(
             proxyAppsURL: configStore.proxyAppsURL,
-            proxyBinaryURL: proxyBinaryURL
+            proxyBinaryURL: proxyBinaryURL,
+            mainSessionToken: mainSessionToken
         )
 
-        ipc = ProxyIPC()
+        ipc = ProxyIPC(sessionToken: mainSessionToken)
         windowController = WindowController()
+        settingsWindowController = SettingsWindowController(store: configStore) { [weak self] workspace in
+            self?.workspaceDidChange(workspace)
+        }
         focusTracker = WindowFocusTracker()
         focusTracker.start()
         refreshLoop = RefreshLoop(
@@ -64,6 +134,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // 3. Подписка на IPC-активации прокси.
         ipc.startListening { [weak self] message in
             self?.handleProxyMessage(message)
+        }
+        commandObserver = DistributedNotificationCenter.default().addObserver(
+            forName: MainAppCommandIPC.openSettingsNotificationName,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.openSettings() }
         }
 
         // 3b. Обновление knownWindows из RefreshLoop.
@@ -85,16 +162,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
 
         requestScreenCapturePermissionIfNeeded()
+        applyWorkspaceServicesFromDisk()
     }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         factory?.shutdown()
         ipc?.stopListening()
+        if let commandObserver {
+            DistributedNotificationCenter.default().removeObserver(commandObserver)
+        }
+        hotKeyController.stop()
         focusTracker?.stop()
         if let refreshLoop {
             Task { await refreshLoop.shutdown() }
         }
         return .terminateNow
+    }
+
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return true
     }
 
     // MARK: - Internal
@@ -138,6 +225,77 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             handleProxyActivation(key: message.windowKey)
         case .close:
             handleProxyCloseRequest(key: message.windowKey)
+        }
+    }
+
+    private func openSettings() {
+        settingsWindowController.show()
+    }
+
+    private func workspaceDidChange(_ workspace: WorkspaceConfig) {
+        applyWorkspaceServices(workspace)
+        Task { await refreshLoop.tick() }
+    }
+
+    private func applyWorkspaceServicesFromDisk() {
+        do {
+            applyWorkspaceServices(try configStore.loadWorkspace())
+        } catch {
+            DiagnosticJournal.shared.log("workspace", "service_apply_load_failed", fields: [
+                "error": error.localizedDescription
+            ])
+        }
+    }
+
+    private func applyWorkspaceServices(_ workspace: WorkspaceConfig) {
+        windowController.minimizeOnRepeatClick = workspace.behavior.minimizeOnRepeatClick
+        hotKeyController.apply(config: workspace.hotKeys) { [weak self] direction in
+            self?.traverseActiveProfile(direction)
+        }
+        LoginItemService.apply(enabled: workspace.loginItem.isEnabled)
+        Task { [updateCheckService] in
+            await updateCheckService.check(config: workspace.updates)
+        }
+    }
+
+    private func traverseActiveProfile(_ direction: ProfileTraversalDirection) {
+        do {
+            let workspace = try configStore.loadWorkspace()
+            let orderedKeys = workspace.activeProfile?.windowKeys.compactMap(WindowKey.init(stringValue:)) ?? []
+            guard !orderedKeys.isEmpty else { return }
+            knownWindowsLock.lock()
+            let windows = knownWindows
+            knownWindowsLock.unlock()
+            let availableKeys = orderedKeys.filter { windows[$0] != nil }
+            guard !availableKeys.isEmpty else { return }
+            let focused = focusTracker.currentFocusedWindowKey()
+            let targetKey = nextKey(in: availableKeys, from: focused, direction: direction)
+            guard let window = windows[targetKey] else { return }
+            windowController.raise(window: window)
+            DiagnosticJournal.shared.log("hotkey", "profile_traversal", fields: [
+                "direction": String(describing: direction),
+                "key": targetKey.stringValue
+            ])
+        } catch {
+            DiagnosticJournal.shared.log("hotkey", "profile_traversal_failed", fields: [
+                "error": error.localizedDescription
+            ])
+        }
+    }
+
+    private func nextKey(
+        in keys: [WindowKey],
+        from focused: WindowKey?,
+        direction: ProfileTraversalDirection
+    ) -> WindowKey {
+        guard let focused, let index = keys.firstIndex(of: focused) else {
+            return direction == .next ? keys[0] : keys[keys.count - 1]
+        }
+        switch direction {
+        case .next:
+            return keys[(index + 1) % keys.count]
+        case .previous:
+            return keys[(index - 1 + keys.count) % keys.count]
         }
     }
 

@@ -47,6 +47,10 @@ public final class WindowFocusTracker {
         return focusedWindow == key
     }
 
+    public func currentFocusedWindowKey() -> WindowKey? {
+        focusedWindow
+    }
+
     @objc private func applicationActivated(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               let bundleID = app.bundleIdentifier else {

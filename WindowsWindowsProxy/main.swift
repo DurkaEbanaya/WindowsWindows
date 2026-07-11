@@ -42,28 +42,37 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     private static let notificationName = "com.windowswindows.proxy.activated"
     private static let previewUpdatedNotificationName = "com.windowswindows.proxy.preview-updated"
     private static let windowKeyUserInfoKey = "windowKey"
+    private static let sessionTokenUserInfoKey = "sessionToken"
     private static let previewFileName = "preview.png"
 
     private let windowKey: String
     private let mainPID: pid_t
+    private let mainStartSeconds: UInt64
+    private let mainStartMicroseconds: UInt64
+    private let mainSessionToken: String
     private var ownerWatchdog: Timer?
     private var lastActivationTime: Date = .distantPast
     private var pendingActivation = false
     private var isTerminating = false
-    private var didSendCloseRequest = false
     private static let debounceInterval: TimeInterval = 0.3
     private static let actionUserInfoKey = "action"
 
     override init() {
         let key = Bundle.main.object(forInfoDictionaryKey: "WWWindowKey") as? String ?? ""
         let ownerPID = Bundle.main.object(forInfoDictionaryKey: "WWMainPID") as? Int ?? 0
+        let ownerStartSeconds = Bundle.main.object(forInfoDictionaryKey: "WWMainProcessStartSeconds") as? NSNumber
+        let ownerStartMicroseconds = Bundle.main.object(forInfoDictionaryKey: "WWMainProcessStartMicroseconds") as? NSNumber
+        let ownerSessionToken = Bundle.main.object(forInfoDictionaryKey: "WWMainSessionToken") as? String ?? ""
         self.windowKey = key
         self.mainPID = pid_t(ownerPID)
+        self.mainStartSeconds = ownerStartSeconds?.uint64Value ?? 0
+        self.mainStartMicroseconds = ownerStartMicroseconds?.uint64Value ?? 0
+        self.mainSessionToken = ownerSessionToken
         super.init()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if windowKey.isEmpty || mainPID <= 0 {
+        if windowKey.isEmpty || mainSessionToken.isEmpty || !isOwnerAlive() {
             NSApp.terminate(nil)
             return
         }
@@ -108,11 +117,19 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         isTerminating = true
         pendingActivation = false
-        if !didSendCloseRequest, isOwnerAlive() {
-            didSendCloseRequest = true
-            broadcast(action: "close")
-        }
         return .terminateNow
+    }
+
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let menu = NSMenu()
+        let closeItem = NSMenuItem(
+            title: "Close Window",
+            action: #selector(closeRepresentedWindow(_:)),
+            keyEquivalent: ""
+        )
+        closeItem.target = self
+        menu.addItem(closeItem)
+        return menu
     }
 
     @objc private func previewUpdated(_ notification: Notification) {
@@ -128,10 +145,12 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func broadcast(action: String) {
+        guard isOwnerAlive() else { return }
         let center = DistributedNotificationCenter.default()
         let userInfo: [String: Any] = [
             Self.windowKeyUserInfoKey: windowKey,
             Self.actionUserInfoKey: action,
+            Self.sessionTokenUserInfoKey: mainSessionToken,
         ]
         center.postNotificationName(
             Notification.Name(Self.notificationName),
@@ -142,6 +161,28 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func isOwnerAlive() -> Bool {
-        mainPID > 0 && kill(mainPID, 0) == 0
+        guard mainPID > 0, mainStartSeconds > 0 else { return false }
+        return liveIdentity(processIdentifier: mainPID).map {
+            $0.startSeconds == mainStartSeconds && $0.startMicroseconds == mainStartMicroseconds
+        } ?? false
+    }
+
+    @objc private func closeRepresentedWindow(_ sender: Any?) {
+        broadcast(action: "close")
+        NSApp.hide(nil)
+    }
+
+    private func liveIdentity(processIdentifier: pid_t) -> (startSeconds: UInt64, startMicroseconds: UInt64)? {
+        var info = proc_bsdinfo()
+        let expectedSize = Int32(MemoryLayout<proc_bsdinfo>.size)
+        let actualSize = proc_pidinfo(
+            processIdentifier,
+            PROC_PIDTBSDINFO,
+            0,
+            &info,
+            expectedSize
+        )
+        guard actualSize == expectedSize else { return nil }
+        return (UInt64(info.pbi_start_tvsec), UInt64(info.pbi_start_tvusec))
     }
 }

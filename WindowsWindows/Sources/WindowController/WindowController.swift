@@ -25,6 +25,7 @@ public final class WindowController {
     private let queue = DispatchQueue(label: "com.windowswindows.windowcontroller")
 
     private let resolver: AXWindowIDResolver
+    public var minimizeOnRepeatClick = true
 
     public init(resolver: AXWindowIDResolver = .shared) {
         self.resolver = resolver
@@ -72,7 +73,7 @@ public final class WindowController {
             // Восстановить + фокус.
             _ = setMinimized(false, on: ax)
             raiseAndActivate(window: window, ax: ax)
-        } else if wasFocusedBeforeProxy {
+        } else if wasFocusedBeforeProxy && minimizeOnRepeatClick {
             // Уже в фокусе → минимизировать.
             let result = setMinimized(true, on: ax)
             DiagnosticJournal.shared.log("window_control", "minimize", fields: [

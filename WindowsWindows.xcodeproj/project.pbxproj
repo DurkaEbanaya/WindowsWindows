@@ -22,6 +22,9 @@
 		AA00000D /* RefreshLoop.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA100090 /* RefreshLoop.swift */; };
 		AA000110 /* DiagnosticJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110110 /* DiagnosticJournal.swift */; };
 		AA000111 /* WindowFocusTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110111 /* WindowFocusTracker.swift */; };
+		AA000112 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110112 /* AppServices.swift */; };
+		AA000113 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110113 /* SettingsWindowController.swift */; };
+		AA000114 /* settings.html in Resources */ = {isa = PBXBuildFile; fileRef = AA110114 /* settings.html */; };
 		AA000100 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110000 /* main.swift */; };
 		AA000101 /* WindowsWindowsProxy binary in Copy Files */ = {isa = PBXBuildFile; fileRef = AA110100 /* WindowsWindowsProxy */; };
 		AA000200 /* main.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA120000 /* main.swift (wwctl) */; };
@@ -30,6 +33,7 @@
 		AA000203 /* ConfigStore.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA100020 /* ConfigStore.swift */; };
 		AA000204 /* Policy.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA100030 /* Policy.swift */; };
 		AA000205 /* wwctl binary in Copy Files */ = {isa = PBXBuildFile; fileRef = AA120100 /* wwctl */; };
+		AA000206 /* ObservedWindow.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA100010 /* ObservedWindow.swift */; };
 		AA000300 /* ConfigurationContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA130000 /* ConfigurationContractTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -51,6 +55,9 @@
 		AA100099 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AA110110 /* DiagnosticJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticJournal.swift; sourceTree = "<group>"; };
 		AA110111 /* WindowFocusTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowFocusTracker.swift; sourceTree = "<group>"; };
+		AA110112 /* AppServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServices.swift; sourceTree = "<group>"; };
+		AA110113 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+		AA110114 /* settings.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = settings.html; sourceTree = "<group>"; };
 		AA100200 /* WindowsWindows.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindowsWindows.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA110000 /* main.swift (proxy) */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = WindowsWindowsProxy/main.swift; sourceTree = "<group>"; };
 		AA110100 /* WindowsWindowsProxy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WindowsWindowsProxy; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -140,6 +147,8 @@
 			children = (
 				AA100002 /* main.swift */,
 				AA100001 /* AppDelegate.swift */,
+				AA110112 /* AppServices.swift */,
+				AA110113 /* SettingsWindowController.swift */,
 			);
 			path = AppDelegate;
 			sourceTree = "<group>";
@@ -223,6 +232,7 @@
 		AA200020 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				AA110114 /* settings.html */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -387,6 +397,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000114 /* settings.html in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -399,6 +410,8 @@
 			files = (
 				AA000002 /* main.swift in Sources */,
 				AA000001 /* AppDelegate.swift in Sources */,
+				AA000112 /* AppServices.swift in Sources */,
+				AA000113 /* SettingsWindowController.swift in Sources */,
 				AA000003 /* ObservedWindow.swift in Sources */,
 				AA000004 /* ApplicationEntry.swift in Sources */,
 				AA000005 /* ShelfConfig.swift in Sources */,
@@ -428,6 +441,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA000200 /* main.swift in Sources (wwctl) */,
+				AA000206 /* ObservedWindow.swift in Sources (wwctl) */,
 				AA000201 /* ApplicationEntry.swift in Sources (wwctl) */,
 				AA000202 /* ShelfConfig.swift in Sources (wwctl) */,
 				AA000203 /* ConfigStore.swift in Sources (wwctl) */,
