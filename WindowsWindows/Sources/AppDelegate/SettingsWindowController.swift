@@ -9,6 +9,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         case toggleApplication
         case setLaunchAtLogin
         case setMinimizeOnRepeatClick
+        case setOptionTabSwitcherEnabled
+        case setDockWindowTilesEnabled
         case toggleTheme
         case closeWindow
         case zoomWindow
@@ -94,6 +96,12 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         case .setMinimizeOnRepeatClick:
             guard let enabled = payload["enabled"] as? Bool else { return (nil, "Missing enabled") }
             return mutateWorkspace { $0.behavior.minimizeOnRepeatClick = enabled }
+        case .setOptionTabSwitcherEnabled:
+            guard let enabled = payload["enabled"] as? Bool else { return (nil, "Missing enabled") }
+            return mutateWorkspace { $0.behavior.optionTabSwitcherEnabled = enabled }
+        case .setDockWindowTilesEnabled:
+            guard let enabled = payload["enabled"] as? Bool else { return (nil, "Missing enabled") }
+            return mutateWorkspace { $0.behavior.dockWindowTilesEnabled = enabled }
         case .toggleTheme:
             return mutateWorkspace { workspace in
                 workspace.appearance.theme = effectiveDarkTheme(workspace.appearance.theme) ? .light : .dark
@@ -193,6 +201,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
                 "applications": applications,
                 "launchAtLogin": workspace.loginItem.isEnabled,
                 "minimizeOnRepeatClick": workspace.behavior.minimizeOnRepeatClick,
+                "optionTabSwitcherEnabled": workspace.behavior.optionTabSwitcherEnabled,
+                "dockWindowTilesEnabled": workspace.behavior.dockWindowTilesEnabled,
                 "theme": effectiveDarkTheme(workspace.appearance.theme) ? "dark" : "light",
             ], nil)
         } catch {
@@ -323,6 +333,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         general.replaceChildren(
           row({ iconName: 'launch', title: 'Запускать при включении', subtitle: 'Программа стартует вместе с системой.', control: toggle(state.launchAtLogin, 'setLaunchAtLogin', 'Запускать при включении') }),
           row({ iconName: 'window', title: 'Повторное нажатие на окно сворачивает его', subtitle: 'Клик по уже активной Dock-иконке прячет выбранное окно.', control: toggle(state.minimizeOnRepeatClick, 'setMinimizeOnRepeatClick', 'Повторное нажатие на окно сворачивает его') }),
+          row({ iconName: 'window', title: 'Показывать окна в Dock', subtitle: 'Создаёт отдельную Dock-иконку для каждого окна.', control: toggle(state.dockWindowTilesEnabled, 'setDockWindowTilesEnabled', 'Показывать окна в Dock') }),
+          row({ iconName: 'keyboard', title: 'Переключатель Option+Tab', subtitle: 'Показывает окна активного пространства в стиле Windows 10.', control: toggle(state.optionTabSwitcherEnabled, 'setOptionTabSwitcherEnabled', 'Включить переключатель Option+Tab') }),
           row({ iconName: 'keyboard', title: 'Сочетание клавиш', subtitle: 'Стандартное: ⌘⇧P. Можно назначить своё.', control: shortcut })
         );
         const themeToggle = document.querySelector('[data-od-id="theme-toggle"]');

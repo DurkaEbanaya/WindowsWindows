@@ -164,6 +164,11 @@ public actor RefreshLoop {
             Task { @MainActor in callback(knownWindows) }
         }
 
+        guard workspace.behavior.dockWindowTilesEnabled else {
+            factory.stopAllProxies()
+            return
+        }
+
         for window in windows where activeKeys.contains(window.key) {
             guard !Task.isCancelled else { return }
             if closeSuppressions.isSuppressed(key: window.key, now: Date()) {

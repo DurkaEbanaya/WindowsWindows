@@ -162,9 +162,30 @@ public final class ProxyFactory: @unchecked Sendable {
         return removed
     }
 
+    /// Stops Dock projection without deleting its cached window previews.
+    public func stopAllProxies() {
+        for key in existingProxyKeys() {
+            _ = terminateProxy(key: key.stringValue)
+        }
+    }
+
     /// Перечислить все существующие прокси-бандлы на диске.
     public func existingProxyKeys() -> [WindowKey] {
         existingProxies().map(\.key)
+    }
+
+    public func previewImage(for windowKey: WindowKey) -> NSImage? {
+        bundleMutationLock.lock()
+        defer { bundleMutationLock.unlock() }
+        for bundleURL in bundleURLs(for: windowKey) {
+            let previewURL = bundleURL
+                .appendingPathComponent("Contents/Resources", isDirectory: true)
+                .appendingPathComponent(Self.previewFileName, isDirectory: false)
+            if let image = NSImage(contentsOf: previewURL) {
+                return image
+            }
+        }
+        return nil
     }
 
     public func existingProxies() -> [ExistingProxy] {

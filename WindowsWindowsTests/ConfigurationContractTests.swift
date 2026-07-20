@@ -122,6 +122,8 @@ final class ConfigurationContractTests: XCTestCase {
         let workspace = try store.loadWorkspace()
 
         XCTAssertTrue(workspace.behavior.minimizeOnRepeatClick)
+        XCTAssertTrue(workspace.behavior.optionTabSwitcherEnabled)
+        XCTAssertTrue(workspace.behavior.dockWindowTilesEnabled)
         XCTAssertEqual(workspace.appearance.theme, .system)
         let persisted = try JSONSerialization.jsonObject(with: Data(contentsOf: store.configURL))
         let dictionary = try XCTUnwrap(persisted as? [String: Any])
@@ -335,5 +337,49 @@ final class ConfigurationContractTests: XCTestCase {
 
         suppressions.suppress(key: key, now: now, duration: 2)
         XCTAssertFalse(suppressions.isSuppressed(key: key, now: now.addingTimeInterval(3)))
+    }
+
+    func testWindowSwitchSelectionStartsAfterFocusedWindowAndWrapsBothDirections() {
+        let first = WindowKey(appPID: 1, windowNumber: 1)
+        let second = WindowKey(appPID: 2, windowNumber: 2)
+        let third = WindowKey(appPID: 3, windowNumber: 3)
+
+        var forward = WindowSwitchSelection(keys: [first, second, third], focusedKey: first, reverse: false)
+        XCTAssertEqual(forward.selectedKey, second)
+        forward.advance(reverse: false)
+        XCTAssertEqual(forward.selectedKey, third)
+        forward.advance(reverse: false)
+        XCTAssertEqual(forward.selectedKey, first)
+
+        var reverse = WindowSwitchSelection(keys: [first, second, third], focusedKey: first, reverse: true)
+        XCTAssertEqual(reverse.selectedKey, third)
+        reverse.advance(reverse: true)
+        XCTAssertEqual(reverse.selectedKey, second)
+        reverse.select(index: 0)
+        XCTAssertEqual(reverse.selectedKey, first)
+    }
+
+
+    func testLegacyBehaviorObjectDefaultsOptionTabSwitcherToEnabled() throws {
+        let data = Data(#"{"minimizeOnRepeatClick":false}"#.utf8)
+        let behavior = try JSONDecoder().decode(WorkspaceBehaviorConfig.self, from: data)
+
+        XCTAssertFalse(behavior.minimizeOnRepeatClick)
+        XCTAssertTrue(behavior.optionTabSwitcherEnabled)
+        XCTAssertTrue(behavior.dockWindowTilesEnabled)
+    }
+
+    func testWindowPresentationModesPersistIndependently() throws {
+        let behavior = WorkspaceBehaviorConfig(
+            optionTabSwitcherEnabled: true,
+            dockWindowTilesEnabled: false
+        )
+        let decoded = try JSONDecoder().decode(
+            WorkspaceBehaviorConfig.self,
+            from: JSONEncoder().encode(behavior)
+        )
+
+        XCTAssertTrue(decoded.optionTabSwitcherEnabled)
+        XCTAssertFalse(decoded.dockWindowTilesEnabled)
     }
 }

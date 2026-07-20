@@ -11,13 +11,15 @@ public final class WindowFocusTracker {
     private var isStarted = false
     private var axObserver: AXObserver?
     private var observedPID: pid_t?
+    private var onFocusedWindowChanged: ((WindowKey) -> Void)?
 
     public init(resolver: AXWindowIDResolver = .shared) {
         self.resolver = resolver
     }
 
-    public func start() {
+    public func start(onFocusedWindowChanged: ((WindowKey) -> Void)? = nil) {
         guard !isStarted else { return }
+        self.onFocusedWindowChanged = onFocusedWindowChanged
         isStarted = true
         let center = NSWorkspace.shared.notificationCenter
         center.addObserver(
@@ -41,6 +43,7 @@ public final class WindowFocusTracker {
             object: nil
         )
         removeAXObserver()
+        onFocusedWindowChanged = nil
     }
 
     public func wasFocusedImmediatelyBeforeProxy(_ key: WindowKey) -> Bool {
@@ -132,6 +135,7 @@ public final class WindowFocusTracker {
            let windowID = resolver.windowID(for: focused) {
             let key = WindowKey(appPID: pid, windowNumber: windowID)
             focusedWindow = key
+            onFocusedWindowChanged?(key)
 
             DiagnosticJournal.shared.log("focus", "focused_window_observed", fields: [
                 "pid": pid,

@@ -31,6 +31,8 @@ WindowsWindows turns individual windows from other applications into separate Do
 - Explicit **Close Window** action for a proxy tile.
 - Application exclusions with immediate persistence.
 - Global active-workspace traversal shortcuts: `Control+Command+←/→` by default.
+- Optional Windows 10-style acrylic per-window switcher on `Option+Tab` with mouse selection (`Shift+Option+Tab` moves backward, `Esc` cancels).
+- Independent switches for per-window Dock tiles and the `Option+Tab` switcher, including an Option+Tab-only mode.
 - Launch at Login through `SMAppService`.
 - Light and dark Settings themes.
 - Background service lifecycle: closing Settings does not stop window tracking.

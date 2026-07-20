@@ -61,6 +61,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var refreshLoop: RefreshLoop!
     private var settingsWindowController: SettingsWindowController!
     private let hotKeyController = GlobalHotKeyController()
+    private let optionTabSwitcher = OptionTabSwitcherController()
+    private var optionTabSwitcherEnabled = false
     private let updateCheckService = UpdateCheckService()
     private var mainInstanceLock: MainInstanceLock?
     private let mainSessionToken = UUID().uuidString
@@ -123,7 +125,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.workspaceDidChange(workspace)
         }
         focusTracker = WindowFocusTracker()
-        focusTracker.start()
+        focusTracker.start { [weak self] key in
+            self?.optionTabSwitcher.noteFocusedWindow(key)
+        }
         refreshLoop = RefreshLoop(
             discovery: discovery,
             factory: factory,
@@ -172,6 +176,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             DistributedNotificationCenter.default().removeObserver(commandObserver)
         }
         hotKeyController.stop()
+        optionTabSwitcher.stop()
         focusTracker?.stop()
         if let refreshLoop {
             Task { await refreshLoop.shutdown() }
@@ -249,12 +254,28 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applyWorkspaceServices(_ workspace: WorkspaceConfig) {
         windowController.minimizeOnRepeatClick = workspace.behavior.minimizeOnRepeatClick
+        applyOptionTabSwitcher(enabled: workspace.behavior.optionTabSwitcherEnabled)
         hotKeyController.apply(config: workspace.hotKeys) { [weak self] direction in
             self?.traverseActiveProfile(direction)
         }
         LoginItemService.apply(enabled: workspace.loginItem.isEnabled)
         Task { [updateCheckService] in
             await updateCheckService.check(config: workspace.updates)
+        }
+    }
+
+    private func applyOptionTabSwitcher(enabled: Bool) {
+        guard optionTabSwitcherEnabled != enabled else { return }
+        optionTabSwitcherEnabled = enabled
+        if enabled {
+            optionTabSwitcher.start(
+                windows: { [weak self] in self?.activeProfileWindows() ?? [] },
+                focusedKey: { [weak self] in self?.focusTracker.currentFocusedWindowKey() },
+                preview: { [weak self] key in self?.factory.previewImage(for: key) },
+                activate: { [weak self] window in self?.windowController.raise(window: window) }
+            )
+        } else {
+            optionTabSwitcher.stop()
         }
     }
 
@@ -281,6 +302,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 "error": error.localizedDescription
             ])
         }
+    }
+
+    private func activeProfileWindows() -> [ObservedWindow] {
+        guard let orderedKeys = try? configStore.loadWorkspace().activeProfile?.windowKeys.compactMap(WindowKey.init(stringValue:)) else {
+            return []
+        }
+        knownWindowsLock.lock()
+        let windows = knownWindows
+        knownWindowsLock.unlock()
+        return orderedKeys.compactMap { windows[$0] }
     }
 
     private func nextKey(

@@ -256,12 +256,33 @@ public enum WorkspaceThemePreference: String, Codable, Sendable {
 
 public struct WorkspaceBehaviorConfig: Codable, Equatable, Sendable {
     public var minimizeOnRepeatClick: Bool
+    public var optionTabSwitcherEnabled: Bool
+    public var dockWindowTilesEnabled: Bool
 
-    public init(minimizeOnRepeatClick: Bool = true) {
+    public init(
+        minimizeOnRepeatClick: Bool = true,
+        optionTabSwitcherEnabled: Bool = true,
+        dockWindowTilesEnabled: Bool = true
+    ) {
         self.minimizeOnRepeatClick = minimizeOnRepeatClick
+        self.optionTabSwitcherEnabled = optionTabSwitcherEnabled
+        self.dockWindowTilesEnabled = dockWindowTilesEnabled
     }
 
     public static let `default` = WorkspaceBehaviorConfig()
+
+    private enum CodingKeys: String, CodingKey {
+        case minimizeOnRepeatClick
+        case optionTabSwitcherEnabled
+        case dockWindowTilesEnabled
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        minimizeOnRepeatClick = try values.decodeIfPresent(Bool.self, forKey: .minimizeOnRepeatClick) ?? true
+        optionTabSwitcherEnabled = try values.decodeIfPresent(Bool.self, forKey: .optionTabSwitcherEnabled) ?? true
+        dockWindowTilesEnabled = try values.decodeIfPresent(Bool.self, forKey: .dockWindowTilesEnabled) ?? true
+    }
 }
 
 public struct WorkspaceAppearanceConfig: Codable, Equatable, Sendable {

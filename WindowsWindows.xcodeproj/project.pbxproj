@@ -24,6 +24,7 @@
 		AA000111 /* WindowFocusTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110111 /* WindowFocusTracker.swift */; };
 		AA000112 /* AppServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110112 /* AppServices.swift */; };
 		AA000113 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110113 /* SettingsWindowController.swift */; };
+		AA000115 /* OptionTabSwitcherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110115 /* OptionTabSwitcherController.swift */; };
 		AA000114 /* settings.html in Resources */ = {isa = PBXBuildFile; fileRef = AA110114 /* settings.html */; };
 		AA000100 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110000 /* main.swift */; };
 		AA000101 /* WindowsWindowsProxy binary in Copy Files */ = {isa = PBXBuildFile; fileRef = AA110100 /* WindowsWindowsProxy */; };
@@ -57,6 +58,7 @@
 		AA110111 /* WindowFocusTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowFocusTracker.swift; sourceTree = "<group>"; };
 		AA110112 /* AppServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppServices.swift; sourceTree = "<group>"; };
 		AA110113 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
+		AA110115 /* OptionTabSwitcherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionTabSwitcherController.swift; sourceTree = "<group>"; };
 		AA110114 /* settings.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = settings.html; sourceTree = "<group>"; };
 		AA100200 /* WindowsWindows.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindowsWindows.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA110000 /* main.swift (proxy) */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = WindowsWindowsProxy/main.swift; sourceTree = "<group>"; };
@@ -149,6 +151,7 @@
 				AA100001 /* AppDelegate.swift */,
 				AA110112 /* AppServices.swift */,
 				AA110113 /* SettingsWindowController.swift */,
+				AA110115 /* OptionTabSwitcherController.swift */,
 			);
 			path = AppDelegate;
 			sourceTree = "<group>";
@@ -412,6 +415,7 @@
 				AA000001 /* AppDelegate.swift in Sources */,
 				AA000112 /* AppServices.swift in Sources */,
 				AA000113 /* SettingsWindowController.swift in Sources */,
+				AA000115 /* OptionTabSwitcherController.swift in Sources */,
 				AA000003 /* ObservedWindow.swift in Sources */,
 				AA000004 /* ApplicationEntry.swift in Sources */,
 				AA000005 /* ShelfConfig.swift in Sources */,
@@ -511,7 +515,7 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -533,7 +537,7 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
