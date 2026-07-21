@@ -71,6 +71,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // Кэш текущих окон для обработки IPC-активаций.
     // Обновляется RefreshLoop.tick(). IPC-handler ищет здесь по windowKey.
     private var knownWindows: [WindowKey: ObservedWindow] = [:]
+    private var knownPreviews: [WindowKey: NSImage] = [:]
     private let knownWindowsLock = NSLock()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -150,9 +151,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // 3b. Обновление knownWindows из RefreshLoop.
         let loop = refreshLoop!
         Task {
-            await loop.setOnWindowsUpdated { [weak self] map in
+            await loop.setOnWindowsUpdated { [weak self] map, previews in
                 self?.knownWindowsLock.lock()
                 self?.knownWindows = map
+                self?.knownPreviews = previews
                 self?.knownWindowsLock.unlock()
             }
             await loop.start()
@@ -271,7 +273,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             optionTabSwitcher.start(
                 windows: { [weak self] in self?.activeProfileWindows() ?? [] },
                 focusedKey: { [weak self] in self?.focusTracker.currentFocusedWindowKey() },
-                preview: { [weak self] key in self?.factory.previewImage(for: key) },
+                preview: { [weak self] key in self?.previewImage(for: key) },
                 activate: { [weak self] window in self?.windowController.raise(window: window) }
             )
         } else {
@@ -312,6 +314,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let windows = knownWindows
         knownWindowsLock.unlock()
         return orderedKeys.compactMap { windows[$0] }
+    }
+
+    private func previewImage(for key: WindowKey) -> NSImage? {
+        knownWindowsLock.lock()
+        let preview = knownPreviews[key]
+        knownWindowsLock.unlock()
+        return preview ?? factory.previewImage(for: key)
     }
 
     private func nextKey(

@@ -31,6 +31,16 @@ public struct CloseProxySuppressionState: Equatable, Sendable {
     }
 }
 
+public struct WindowPresentationPlan: Equatable, Sendable {
+    public let capturesPreviews: Bool
+    public let projectsDockTiles: Bool
+
+    public init(behavior: WorkspaceBehaviorConfig) {
+        capturesPreviews = behavior.optionTabSwitcherEnabled || behavior.dockWindowTilesEnabled
+        projectsDockTiles = behavior.dockWindowTilesEnabled
+    }
+}
+
 /// Periodically reconciles proxy bundles with the set of real windows.
 /// All mutable reconciliation state is actor-isolated, so capture operations
 /// from adjacent timer events can never overlap.
@@ -45,14 +55,16 @@ public actor RefreshLoop {
     private var isShuttingDown = false
     private var lastSnapshotTimes: [WindowKey: Date] = [:]
     private var lastTitles: [WindowKey: String] = [:]
+    private var previewImages: [WindowKey: NSImage] = [:]
     private var lastKnownWindows: [WindowKey: ObservedWindow] = [:]
     private var lastCaptureAuthorization: Bool?
     private var refreshInterval: TimeInterval = 2.0
     private var snapshotInterval: TimeInterval = 5.0
     private var lastKnownConfig: ShelfConfig?
     private var lastKnownWorkspace: WorkspaceConfig?
-    private var onWindowsUpdated: (@MainActor @Sendable ([WindowKey: ObservedWindow]) -> Void)?
+    private var onWindowsUpdated: (@MainActor @Sendable ([WindowKey: ObservedWindow], [WindowKey: NSImage]) -> Void)?
     private var closeSuppressions = CloseProxySuppressionState()
+    private var lastDockWindowTilesEnabled: Bool?
 
     public init(
         discovery: WindowDiscovery,
@@ -92,7 +104,7 @@ public actor RefreshLoop {
     }
 
     public func setOnWindowsUpdated(
-        _ callback: @escaping @MainActor @Sendable ([WindowKey: ObservedWindow]) -> Void
+        _ callback: @escaping @MainActor @Sendable ([WindowKey: ObservedWindow], [WindowKey: NSImage]) -> Void
     ) {
         onWindowsUpdated = callback
     }
@@ -149,6 +161,7 @@ public actor RefreshLoop {
             ])
         }
         let activeKeys = workspace.activeWindowKeySet()
+        let presentation = WindowPresentationPlan(behavior: workspace.behavior)
         closeSuppressions.removeObservedKeys(validKeys, now: Date())
         let captureAuthorized = await snapshotter.isCaptureAuthorized
 
@@ -161,17 +174,23 @@ public actor RefreshLoop {
 
         if let callback = onWindowsUpdated {
             let knownWindows = lastKnownWindows
-            Task { @MainActor in callback(knownWindows) }
+            let previews = previewImages
+            Task { @MainActor in callback(knownWindows, previews) }
         }
 
-        guard workspace.behavior.dockWindowTilesEnabled else {
+        if !presentation.projectsDockTiles, lastDockWindowTilesEnabled != false {
             factory.stopAllProxies()
+        }
+        lastDockWindowTilesEnabled = presentation.projectsDockTiles
+
+        guard presentation.capturesPreviews else {
+            previewImages.removeAll()
             return
         }
 
         for window in windows where activeKeys.contains(window.key) {
             guard !Task.isCancelled else { return }
-            if closeSuppressions.isSuppressed(key: window.key, now: Date()) {
+            if presentation.projectsDockTiles && closeSuppressions.isSuppressed(key: window.key, now: Date()) {
                 DiagnosticJournal.shared.log("proxy", "launch_suppressed_for_close", fields: [
                     "key": window.key.stringValue
                 ])
@@ -195,15 +214,31 @@ public actor RefreshLoop {
                 }
 
                 guard !Task.isCancelled else { return }
-                try factory.ensure(window: window, snapshot: snapshot)
+                if let snapshot {
+                    previewImages[window.key] = snapshot
+                }
                 lastTitles[window.key] = window.title
                 if snapshot != nil {
                     lastSnapshotTimes[window.key] = Date()
                 }
+                if presentation.projectsDockTiles {
+                    try factory.ensure(window: window, snapshot: snapshot)
+                }
             } catch {
-                NSLog("ProxyFactory.ensure failed for \(window.key.stringValue): \(error.localizedDescription)")
+                NSLog("Window presentation refresh failed for \(window.key.stringValue): \(error.localizedDescription)")
             }
         }
+
+        let retainedPreviewKeys = validKeys.intersection(activeKeys)
+        previewImages = previewImages.filter { retainedPreviewKeys.contains($0.key) }
+
+        if let callback = onWindowsUpdated {
+            let knownWindows = lastKnownWindows
+            let previews = previewImages
+            Task { @MainActor in callback(knownWindows, previews) }
+        }
+
+        guard presentation.projectsDockTiles else { return }
 
         do {
             try factory.removeInvalidProxyBundles()

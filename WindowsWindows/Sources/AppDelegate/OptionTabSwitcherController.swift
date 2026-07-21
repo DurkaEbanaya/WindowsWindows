@@ -204,7 +204,10 @@ public final class OptionTabSwitcherController {
             },
             selectedIndex: selection?.selectedIndex ?? 0
         )
-        DiagnosticJournal.shared.log("option_tab", "shown", fields: ["windows": items.count])
+        DiagnosticJournal.shared.log("option_tab", "shown", fields: [
+            "windows": items.count,
+            "previews": items.filter { $0.preview != nil }.count
+        ])
         return true
     }
 

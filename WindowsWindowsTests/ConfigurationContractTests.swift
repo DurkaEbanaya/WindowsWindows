@@ -382,4 +382,14 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertTrue(decoded.optionTabSwitcherEnabled)
         XCTAssertFalse(decoded.dockWindowTilesEnabled)
     }
+
+    func testOptionTabOnlyModeStillCapturesPreviewsWithoutDockProjection() {
+        let plan = WindowPresentationPlan(behavior: WorkspaceBehaviorConfig(
+            optionTabSwitcherEnabled: true,
+            dockWindowTilesEnabled: false
+        ))
+
+        XCTAssertTrue(plan.capturesPreviews)
+        XCTAssertFalse(plan.projectsDockTiles)
+    }
 }
