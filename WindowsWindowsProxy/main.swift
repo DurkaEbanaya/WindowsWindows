@@ -54,6 +54,7 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     private var lastActivationTime: Date = .distantPast
     private var pendingActivation = false
     private var isTerminating = false
+    private var hasRequestedWindowClose = false
     private static let debounceInterval: TimeInterval = 0.3
     private static let actionUserInfoKey = "action"
 
@@ -115,12 +116,14 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        requestWindowCloseIfNeeded()
         isTerminating = true
         pendingActivation = false
         return .terminateNow
     }
 
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        pendingActivation = false
         let menu = NSMenu()
         let closeItem = NSMenuItem(
             title: "Close Window",
@@ -168,8 +171,15 @@ final class ProxyAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func closeRepresentedWindow(_ sender: Any?) {
-        broadcast(action: "close")
+        pendingActivation = false
+        requestWindowCloseIfNeeded()
         NSApp.hide(nil)
+    }
+
+    private func requestWindowCloseIfNeeded() {
+        guard !hasRequestedWindowClose, isOwnerAlive() else { return }
+        hasRequestedWindowClose = true
+        broadcast(action: "close")
     }
 
     private func liveIdentity(processIdentifier: pid_t) -> (startSeconds: UInt64, startMicroseconds: UInt64)? {

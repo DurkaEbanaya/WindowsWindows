@@ -101,6 +101,27 @@ public final class WindowController {
         raiseAndActivate(window: window, ax: ax)
     }
 
+    @discardableResult
+    public func minimizeFocusedWindow(of application: NSRunningApplication) -> Bool {
+        let appElement = AXUIElementCreateApplication(application.processIdentifier)
+        var focusedWindowRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindowRef
+        ) == .success,
+              let focusedWindow = focusedWindowRef as! AXUIElement? else {
+            return false
+        }
+        let result = setMinimized(true, on: focusedWindow)
+        DiagnosticJournal.shared.log("window_control", "dock_app_minimize", fields: [
+            "pid": application.processIdentifier,
+            "bundleID": application.bundleIdentifier ?? "",
+            "axError": result.rawValue
+        ])
+        return result == .success
+    }
+
     /// Close exactly the represented AX window.
     ///
     /// This intentionally does not synthesize Cmd-W: keyboard shortcuts are

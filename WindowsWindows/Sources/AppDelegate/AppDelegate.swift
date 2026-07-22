@@ -62,7 +62,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindowController: SettingsWindowController!
     private let hotKeyController = GlobalHotKeyController()
     private let optionTabSwitcher = OptionTabSwitcherController()
+    private let dockRepeatClickController = DockRepeatClickController()
     private var optionTabSwitcherEnabled = false
+    private var dockRepeatClickEnabled = false
     private let updateCheckService = UpdateCheckService()
     private var mainInstanceLock: MainInstanceLock?
     private let mainSessionToken = UUID().uuidString
@@ -179,6 +181,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotKeyController.stop()
         optionTabSwitcher.stop()
+        dockRepeatClickController.stop()
         focusTracker?.stop()
         if let refreshLoop {
             Task { await refreshLoop.shutdown() }
@@ -256,6 +259,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applyWorkspaceServices(_ workspace: WorkspaceConfig) {
         windowController.minimizeOnRepeatClick = workspace.behavior.minimizeOnRepeatClick
+        applyDockRepeatClick(enabled: workspace.behavior.minimizeOnRepeatClick)
         applyOptionTabSwitcher(enabled: workspace.behavior.optionTabSwitcherEnabled)
         hotKeyController.apply(config: workspace.hotKeys) { [weak self] direction in
             self?.traverseActiveProfile(direction)
@@ -263,6 +267,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         LoginItemService.apply(enabled: workspace.loginItem.isEnabled)
         Task { [updateCheckService] in
             await updateCheckService.check(config: workspace.updates)
+        }
+    }
+
+    private func applyDockRepeatClick(enabled: Bool) {
+        guard dockRepeatClickEnabled != enabled else { return }
+        dockRepeatClickEnabled = enabled
+        if enabled {
+            dockRepeatClickController.start { [weak self] application in
+                _ = self?.windowController.minimizeFocusedWindow(of: application)
+            }
+        } else {
+            dockRepeatClickController.stop()
         }
     }
 

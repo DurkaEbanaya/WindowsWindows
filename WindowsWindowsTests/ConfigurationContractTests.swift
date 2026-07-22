@@ -392,4 +392,31 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertTrue(plan.capturesPreviews)
         XCTAssertFalse(plan.projectsDockTiles)
     }
+
+    func testDockRepeatClickMinimizesOnlyTheAlreadyFrontmostNonProxyApplication() {
+        XCTAssertEqual(
+            DockRepeatClickDecision.decide(
+                clickedApplicationPID: 42,
+                frontmostApplicationPID: 42,
+                isProxyApplication: false
+            ),
+            .minimize
+        )
+        XCTAssertEqual(
+            DockRepeatClickDecision.decide(
+                clickedApplicationPID: 42,
+                frontmostApplicationPID: 21,
+                isProxyApplication: false
+            ),
+            .ignore
+        )
+        XCTAssertEqual(
+            DockRepeatClickDecision.decide(
+                clickedApplicationPID: 42,
+                frontmostApplicationPID: 42,
+                isProxyApplication: true
+            ),
+            .ignore
+        )
+    }
 }

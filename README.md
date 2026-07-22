@@ -28,6 +28,7 @@ WindowsWindows turns individual windows from other applications into separate Do
 - Live window previews powered by ScreenCaptureKit.
 - Exact-window activation through macOS Accessibility APIs.
 - Optional repeat-click minimization for the already focused window.
+- Windows-style repeat-click minimization for the already frontmost application icon in the macOS Dock.
 - Explicit **Close Window** action for a proxy tile.
 - Application exclusions with immediate persistence.
 - Global active-workspace traversal shortcuts: `Control+Command+←/→` by default.
