@@ -410,14 +410,16 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertFalse(plan.projectsDockTiles)
     }
 
-    func testHoverPreviewDiscoveryIgnoresUserScopeWithoutChangingMainScope() {
+    func testRuntimeDiscoveryIgnoresDockTileExclusions() {
         let excludedBundleID = "com.example.excluded"
         let config = ShelfConfig(
             scopeMode: .allExceptListed,
             bundleIdentifiers: [excludedBundleID]
         )
         let plan = WindowPresentationPlan(behavior: WorkspaceBehaviorConfig(
-            dockHoverPreviewsEnabled: true
+            optionTabSwitcherEnabled: true,
+            dockWindowTilesEnabled: false,
+            dockHoverPreviewsEnabled: false
         ))
 
         XCTAssertFalse(Policy.admit(bundleIdentifier: excludedBundleID, config: config))

@@ -45,7 +45,6 @@ public struct WindowPresentationPlan: Equatable, Sendable {
     }
 
     public func discoveryConfig(from config: ShelfConfig) -> ShelfConfig {
-        guard capturesHoverPreviews else { return config }
         return ShelfConfig(
             scopeMode: .allExceptListed,
             bundleIdentifiers: [],
@@ -137,7 +136,9 @@ public actor RefreshLoop {
         let workspace = loadWorkspace()
         guard let workspace else { return nil }
         let config = workspace.effectiveShelfConfig
-        let snapshot = discovery.discover(config: config)
+        let snapshot = discovery.discover(
+            config: WindowPresentationPlan(behavior: workspace.behavior).discoveryConfig(from: config)
+        )
         reconcileKnownWindows(with: snapshot)
         return lastKnownWindows[key]
     }
@@ -171,17 +172,15 @@ public actor RefreshLoop {
         let discoveryConfig = presentation.discoveryConfig(from: config)
         let discoverySnapshot = discovery.discover(config: discoveryConfig)
         let hoverWindows = discoverySnapshot.windows
-        let windows = hoverWindows.filter {
-            Policy.admit(bundleIdentifier: $0.bundleIdentifier, config: config)
-        }
-        let filteredSnapshot = WindowDiscoverySnapshot(
-            windows: windows,
-            incompleteApplications: discoverySnapshot.incompleteApplications,
-            unidentifiedApplicationPIDs: discoverySnapshot.unidentifiedApplicationPIDs
-        )
+        let windows = hoverWindows
+        let dockWindowKeys = Set(windows.compactMap { window in
+            Policy.admit(bundleIdentifier: window.bundleIdentifier, config: config)
+                ? window.key
+                : nil
+        })
         let windowMap = Dictionary(uniqueKeysWithValues: windows.map { ($0.key, $0) })
         let validKeys = Set(windowMap.keys)
-        reconcileKnownWindows(with: filteredSnapshot)
+        reconcileKnownWindows(with: discoverySnapshot)
         Self.reconcileWindows(&lastKnownHoverWindows, with: discoverySnapshot)
         let hoverWindowMap = lastKnownHoverWindows
         do {
@@ -223,11 +222,18 @@ public actor RefreshLoop {
             return
         }
 
-        let captureWindows = workspace.behavior.dockHoverPreviewsEnabled ? hoverWindows : windows
-        for window in captureWindows
-        where workspace.behavior.dockHoverPreviewsEnabled || activeKeys.contains(window.key) {
+        let previewWindowKeys = Set(windows.compactMap { window in
+            let isActive = activeKeys.contains(window.key)
+            let isPreviewed = workspace.behavior.dockHoverPreviewsEnabled
+                || (isActive && workspace.behavior.optionTabSwitcherEnabled)
+                || (isActive && dockWindowKeys.contains(window.key))
+            return isPreviewed ? window.key : nil
+        })
+        for window in windows where previewWindowKeys.contains(window.key) {
             guard !Task.isCancelled else { return }
-            let projectsThisWindow = presentation.projectsDockTiles && activeKeys.contains(window.key)
+            let projectsThisWindow = presentation.projectsDockTiles
+                && activeKeys.contains(window.key)
+                && dockWindowKeys.contains(window.key)
             if projectsThisWindow && closeSuppressions.isSuppressed(key: window.key, now: Date()) {
                 DiagnosticJournal.shared.log("proxy", "launch_suppressed_for_close", fields: [
                     "key": window.key.stringValue
@@ -267,10 +273,7 @@ public actor RefreshLoop {
             }
         }
 
-        let retainedPreviewKeys = workspace.behavior.dockHoverPreviewsEnabled
-            ? Set(hoverWindowMap.keys)
-            : validKeys.intersection(activeKeys)
-        previewImages = previewImages.filter { retainedPreviewKeys.contains($0.key) }
+        previewImages = previewImages.filter { previewWindowKeys.contains($0.key) }
 
         if let callback = onWindowsUpdated {
             let knownWindows = lastKnownWindows
@@ -285,7 +288,7 @@ public actor RefreshLoop {
         } catch {
             NSLog("ProxyFactory.removeInvalidProxyBundles failed: \(error.localizedDescription)")
         }
-        let projectedKeys = validKeys.intersection(activeKeys)
+        let projectedKeys = validKeys.intersection(activeKeys).intersection(dockWindowKeys)
         let staleKeys = factory.existingProxies().filter { proxy in
             return !projectedKeys.contains(proxy.key)
                 && discoverySnapshot.isAbsenceAuthoritative(
