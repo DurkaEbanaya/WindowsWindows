@@ -63,7 +63,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotKeyController = GlobalHotKeyController()
     private let optionTabSwitcher = OptionTabSwitcherController()
     private let dockRepeatClickController = DockRepeatClickController()
+    private let dockHoverPreviewController = DockHoverPreviewController()
     private var optionTabSwitcherEnabled = false
+    private var appliedWorkspaceServices: WorkspaceConfig?
     private let updateCheckService = UpdateCheckService()
     private var mainInstanceLock: MainInstanceLock?
     private let mainSessionToken = UUID().uuidString
@@ -72,6 +74,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // Кэш текущих окон для обработки IPC-активаций.
     // Обновляется RefreshLoop.tick(). IPC-handler ищет здесь по windowKey.
     private var knownWindows: [WindowKey: ObservedWindow] = [:]
+    private var knownHoverWindows: [WindowKey: ObservedWindow] = [:]
     private var knownPreviews: [WindowKey: NSImage] = [:]
     private var dockWindowPreferences = DockWindowPreferenceState()
     private let knownWindowsLock = NSLock()
@@ -162,9 +165,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // 3b. Обновление knownWindows из RefreshLoop.
         let loop = refreshLoop!
         Task {
-            await loop.setOnWindowsUpdated { [weak self] map, previews in
+            await loop.setOnWindowsUpdated { [weak self] map, hoverMap, previews in
                 self?.knownWindowsLock.lock()
                 self?.knownWindows = map
+                self?.knownHoverWindows = hoverMap
                 self?.knownPreviews = previews
                 self?.knownWindowsLock.unlock()
             }
@@ -201,6 +205,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.dockWindowPreferences.noteUserInteraction(with: pid, now: Date())
             }
         )
+        dockHoverPreviewController.start(
+            windows: { [weak self] target in self?.dockHoverWindows(for: target) ?? [] },
+            preview: { [weak self] key in self?.previewImage(for: key) },
+            activate: { [weak self] window in
+                self?.dockWindowPreferences.pin(window.key)
+                self?.windowController.raise(window: window)
+            }
+        )
     }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -212,6 +224,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyController.stop()
         optionTabSwitcher.stop()
         dockRepeatClickController.stop()
+        dockHoverPreviewController.stop()
         focusTracker?.stop()
         if let refreshLoop {
             Task { await refreshLoop.shutdown() }
@@ -288,15 +301,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyWorkspaceServices(_ workspace: WorkspaceConfig) {
+        let previous = appliedWorkspaceServices
+        appliedWorkspaceServices = workspace
         windowController.minimizeOnRepeatClick = workspace.behavior.minimizeOnRepeatClick
         dockRepeatClickController.isPrimaryClickEnabled = workspace.behavior.minimizeOnRepeatClick
+        dockHoverPreviewController.isEnabled = workspace.behavior.dockHoverPreviewsEnabled
+        dockHoverPreviewController.showDelay = workspace.behavior.dockHoverPreviewDelay
         applyOptionTabSwitcher(enabled: workspace.behavior.optionTabSwitcherEnabled)
-        hotKeyController.apply(config: workspace.hotKeys) { [weak self] direction in
-            self?.traverseActiveProfile(direction)
+        if previous?.hotKeys != workspace.hotKeys {
+            hotKeyController.apply(config: workspace.hotKeys) { [weak self] direction in
+                self?.traverseActiveProfile(direction)
+            }
         }
-        LoginItemService.apply(enabled: workspace.loginItem.isEnabled)
-        Task { [updateCheckService] in
-            await updateCheckService.check(config: workspace.updates)
+        if previous?.loginItem != workspace.loginItem {
+            LoginItemService.apply(enabled: workspace.loginItem.isEnabled)
+        }
+        if previous?.updates != workspace.updates {
+            Task { [updateCheckService] in
+                await updateCheckService.check(config: workspace.updates)
+            }
         }
     }
 
@@ -370,6 +393,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             dockWindowPreferences.invalidateTarget(for: application.processIdentifier)
         }
         return window
+    }
+
+    private func dockHoverWindows(for target: DockItemTarget) -> [ObservedWindow] {
+        switch target {
+        case .application(let pid):
+            knownWindowsLock.lock()
+            let windows = knownHoverWindows.values.filter { $0.appPID == pid }
+            knownWindowsLock.unlock()
+            return windows.sorted { $0.windowNumber < $1.windowNumber }
+        case .proxy(let key):
+            knownWindowsLock.lock()
+            let window = knownHoverWindows[key]
+            knownWindowsLock.unlock()
+            return window.map { [$0] } ?? []
+        }
     }
 
     private func nextKey(

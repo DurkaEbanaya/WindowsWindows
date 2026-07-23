@@ -11,6 +11,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         case setMinimizeOnRepeatClick
         case setOptionTabSwitcherEnabled
         case setDockWindowTilesEnabled
+        case setDockHoverPreviewsEnabled
+        case setDockHoverPreviewDelay
         case toggleTheme
         case closeWindow
         case zoomWindow
@@ -22,6 +24,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
     private var webView: WKWebView?
     private var bridge: SettingsScriptBridge?
     private var preZoomFrame: NSRect?
+    private var lastStateData: Data?
+    private var applicationCatalog: [ApplicationCatalogRow]?
 
     public init(store: ConfigStore, onWorkspaceChanged: @escaping @MainActor (WorkspaceConfig) -> Void) {
         self.store = store
@@ -30,6 +34,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
 
     public func show() {
         if window == nil { buildWindow() }
+        applicationCatalog = nil
         pushState()
         activateForInteraction()
         DispatchQueue.main.async { [weak self] in
@@ -102,8 +107,22 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         case .setDockWindowTilesEnabled:
             guard let enabled = payload["enabled"] as? Bool else { return (nil, "Missing enabled") }
             return mutateWorkspace { $0.behavior.dockWindowTilesEnabled = enabled }
+        case .setDockHoverPreviewsEnabled:
+            guard let enabled = payload["enabled"] as? Bool else { return (nil, "Missing enabled") }
+            return mutateWorkspace { $0.behavior.dockHoverPreviewsEnabled = enabled }
+        case .setDockHoverPreviewDelay:
+            guard let seconds = payload["seconds"] as? NSNumber else { return (nil, "Missing seconds") }
+            return mutateWorkspace {
+                $0.behavior = WorkspaceBehaviorConfig(
+                    minimizeOnRepeatClick: $0.behavior.minimizeOnRepeatClick,
+                    optionTabSwitcherEnabled: $0.behavior.optionTabSwitcherEnabled,
+                    dockWindowTilesEnabled: $0.behavior.dockWindowTilesEnabled,
+                    dockHoverPreviewsEnabled: $0.behavior.dockHoverPreviewsEnabled,
+                    dockHoverPreviewDelay: seconds.doubleValue
+                )
+            }
         case .toggleTheme:
-            return mutateWorkspace { workspace in
+            return mutateWorkspace(renderState: true) { workspace in
                 workspace.appearance.theme = effectiveDarkTheme(workspace.appearance.theme) ? .light : .dark
             }
         case .closeWindow:
@@ -174,10 +193,16 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
     }
 
     private func pushState() {
-        guard let webView, let state = stateReply().0,
-              JSONSerialization.isValidJSONObject(state),
-              let data = try? JSONSerialization.data(withJSONObject: state),
+        guard let state = stateReply().0 as? [String: Any] else { return }
+        pushState(state)
+    }
+
+    private func pushState(_ state: [String: Any]) {
+        guard let webView, JSONSerialization.isValidJSONObject(state),
+              let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8) else { return }
+        guard data != lastStateData else { return }
+        lastStateData = data
         webView.evaluateJavaScript("window.WindowsWindowsNative?.render(\(json))") { _, error in
             if let error {
                 DiagnosticJournal.shared.log("settings", "render_failed", fields: ["error": error.localizedDescription])
@@ -189,7 +214,9 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         do {
             let workspace = try store.loadWorkspace()
             let configured = workspace.activeProfile?.shelfConfig.bundleIdentifiers ?? []
-            let applications: [[String: Any]] = ApplicationCatalog.load(configuredIDs: configured).map { row in
+            let catalog = applicationCatalog ?? ApplicationCatalog.load(configuredIDs: configured)
+            applicationCatalog = catalog
+            let applications: [[String: Any]] = catalog.map { row in
                 [
                     "bundleIdentifier": row.bundleIdentifier,
                     "name": row.name,
@@ -203,6 +230,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
                 "minimizeOnRepeatClick": workspace.behavior.minimizeOnRepeatClick,
                 "optionTabSwitcherEnabled": workspace.behavior.optionTabSwitcherEnabled,
                 "dockWindowTilesEnabled": workspace.behavior.dockWindowTilesEnabled,
+                "dockHoverPreviewsEnabled": workspace.behavior.dockHoverPreviewsEnabled,
+                "dockHoverPreviewDelay": workspace.behavior.dockHoverPreviewDelay,
                 "theme": effectiveDarkTheme(workspace.appearance.theme) ? "dark" : "light",
             ], nil)
         } catch {
@@ -210,13 +239,17 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         }
     }
 
-    private func mutateWorkspace(_ transform: (inout WorkspaceConfig) throws -> Void) -> (Any?, String?) {
+    private func mutateWorkspace(
+        renderState: Bool = false,
+        _ transform: (inout WorkspaceConfig) throws -> Void
+    ) -> (Any?, String?) {
         do {
             let workspace = try store.updateWorkspace(transform)
             onWorkspaceChanged(workspace)
-            let reply = stateReply()
-            pushState()
-            return reply
+            guard renderState else { return (["ok": true], nil) }
+            let state = stateReply()
+            if let value = state.0 as? [String: Any] { pushState(value) }
+            return state
         } catch {
             DiagnosticJournal.shared.log("settings", "workspace_update_failed", fields: ["error": error.localizedDescription])
             return (nil, error.localizedDescription)
@@ -252,8 +285,12 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         const paths = {
           application: '<rect x="5" y="5" width="14" height="14"/><path d="M5 9h14"/>',
           launch: '<path d="M5 12h14M13 6l6 6-6 6"/>',
-          window: '<rect x="5" y="5" width="14" height="10"/><path d="M8 19h8M9 9h6M12 15v4"/>',
-          keyboard: '<rect x="4" y="7" width="16" height="10" rx="2"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M8 14h8"/>'
+          repeatClick: '<rect x="5" y="5" width="14" height="10"/><path d="M8 19h8M12 15v4M8 10h5"/><path d="m11 8 2 2-2 2"/>',
+          dockWindows: '<rect x="4" y="5" width="10" height="9"/><rect x="10" y="8" width="10" height="9"/><path d="M5 20h14"/>',
+          hoverPreview: '<rect x="4" y="5" width="13" height="10"/><path d="M7 8h7M18 14l2 5-2.4-1.1-1.6 2.1-1-6Z"/>',
+          delay: '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2M9 3h6"/>',
+          optionTab: '<rect x="3" y="6" width="9" height="8"/><rect x="12" y="10" width="9" height="8"/><path d="M6 18h4M8 16l2 2-2 2"/>',
+          shortcut: '<rect x="4" y="7" width="16" height="10"/><path d="M7 10h.01M10 10h.01M13 10h.01M16 10h.01M8 14h5M16 13v3M14.5 14.5h3"/>'
         };
         return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">${paths[name]}</svg>`;
       };
@@ -315,6 +352,28 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         return input;
       };
 
+      const delaySlider = (seconds) => {
+        const wrapper = document.createElement('span');
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.gap = '10px';
+        const value = document.createElement('span');
+        value.style.minWidth = '44px';
+        value.style.fontSize = '12px';
+        value.style.textAlign = 'right';
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = '0.1'; input.max = '1.5'; input.step = '0.05';
+        input.value = String(seconds);
+        input.setAttribute('aria-label', 'Задержка появления превью');
+        const updateValue = () => { value.textContent = `${Number(input.value).toFixed(2)} с`; };
+        input.addEventListener('input', updateValue);
+        input.addEventListener('change', () => post('setDockHoverPreviewDelay', { seconds: Number(input.value) }));
+        updateValue();
+        wrapper.append(input, value);
+        return wrapper;
+      };
+
       const render = (state) => {
         document.documentElement.dataset.theme = state.theme;
         const list = document.querySelector('[data-od-id="exceptions-list"]');
@@ -332,10 +391,12 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate, WKNavig
         shortcut.setAttribute('aria-label', 'Назначить сочетание клавиш');
         general.replaceChildren(
           row({ iconName: 'launch', title: 'Запускать при включении', subtitle: 'Программа стартует вместе с системой.', control: toggle(state.launchAtLogin, 'setLaunchAtLogin', 'Запускать при включении') }),
-          row({ iconName: 'window', title: 'Повторное нажатие на окно сворачивает его', subtitle: 'Клик по уже активной Dock-иконке прячет выбранное окно.', control: toggle(state.minimizeOnRepeatClick, 'setMinimizeOnRepeatClick', 'Повторное нажатие на окно сворачивает его') }),
-          row({ iconName: 'window', title: 'Показывать окна в Dock', subtitle: 'Создаёт отдельную Dock-иконку для каждого окна.', control: toggle(state.dockWindowTilesEnabled, 'setDockWindowTilesEnabled', 'Показывать окна в Dock') }),
-          row({ iconName: 'keyboard', title: 'Переключатель Option+Tab', subtitle: 'Показывает окна активного пространства в стиле Windows 10.', control: toggle(state.optionTabSwitcherEnabled, 'setOptionTabSwitcherEnabled', 'Включить переключатель Option+Tab') }),
-          row({ iconName: 'keyboard', title: 'Сочетание клавиш', subtitle: 'Стандартное: ⌘⇧P. Можно назначить своё.', control: shortcut })
+          row({ iconName: 'repeatClick', title: 'Повторное нажатие на окно сворачивает его', subtitle: 'Клик по уже активной Dock-иконке прячет выбранное окно.', control: toggle(state.minimizeOnRepeatClick, 'setMinimizeOnRepeatClick', 'Повторное нажатие на окно сворачивает его') }),
+          row({ iconName: 'dockWindows', title: 'Показывать окна в Dock', subtitle: 'Создаёт отдельную Dock-иконку для каждого окна.', control: toggle(state.dockWindowTilesEnabled, 'setDockWindowTilesEnabled', 'Показывать окна в Dock') }),
+          row({ iconName: 'hoverPreview', title: 'Превью окон при наведении', subtitle: 'Показывает окна приложения при наведении на его значок в Dock.', control: toggle(state.dockHoverPreviewsEnabled, 'setDockHoverPreviewsEnabled', 'Превью окон при наведении') }),
+          row({ iconName: 'delay', title: 'Задержка появления превью', subtitle: 'Сколько ждать после наведения перед показом панели.', control: delaySlider(state.dockHoverPreviewDelay) }),
+          row({ iconName: 'optionTab', title: 'Переключатель Option+Tab', subtitle: 'Показывает окна активного пространства в стиле Windows 10.', control: toggle(state.optionTabSwitcherEnabled, 'setOptionTabSwitcherEnabled', 'Включить переключатель Option+Tab') }),
+          row({ iconName: 'shortcut', title: 'Сочетание клавиш', subtitle: 'Стандартное: ⌘⇧P. Можно назначить своё.', control: shortcut })
         );
         const themeToggle = document.querySelector('[data-od-id="theme-toggle"]');
         const isDark = state.theme === 'dark';
@@ -390,6 +451,7 @@ private final class SettingsFrameView: NSView {
     private enum ResizeZone { case left, right, top, bottom, topLeft, topRight, bottomLeft, bottomRight }
     private let resizeThickness: CGFloat = 8
     private var activeZone: ResizeZone?
+    private var cursorZone: ResizeZone?
     private var startMouse: NSPoint?
     private var startFrame: NSRect?
 
@@ -415,6 +477,7 @@ private final class SettingsFrameView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        cursorZone = nil
         NSCursor.arrow.set()
     }
 
@@ -505,7 +568,10 @@ private final class SettingsFrameView: NSView {
     }
 
     private func setCursor(for point: NSPoint) {
-        switch zone(at: point) {
+        let zone = zone(at: point)
+        guard zone != cursorZone else { return }
+        cursorZone = zone
+        switch zone {
         case .left, .right, .topLeft, .topRight, .bottomLeft, .bottomRight:
             NSCursor.resizeLeftRight.set()
         case .top, .bottom:

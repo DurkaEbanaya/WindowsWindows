@@ -1,5 +1,4 @@
 import Cocoa
-import ApplicationServices
 import CoreGraphics
 
 public enum DockPrimaryClickDecision: Equatable, Sendable {
@@ -82,18 +81,13 @@ public struct DockWindowPreferenceState: Equatable, Sendable {
 
 @MainActor
 public final class DockRepeatClickController {
-    private enum Target {
-        case application(pid_t)
-        case proxy(WindowKey)
-    }
-
     private enum PendingAction {
         case toggle(pid_t)
         case quit(pid_t)
         case close(WindowKey)
     }
 
-    private let systemWideElement = AXUIElementCreateSystemWide()
+    private let resolver = DockItemResolver()
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var pendingLeftAction: PendingAction?
@@ -188,7 +182,11 @@ public final class DockRepeatClickController {
 
         switch type {
         case .leftMouseDown:
-            guard let target = target(at: event.location) else {
+            guard resolver.isNearDock(event.location) else {
+                noteFrontmostUserInteraction()
+                return false
+            }
+            guard let target = resolver.target(at: event.location) else {
                 noteUserInteraction(at: event.location)
                 return false
             }
@@ -200,6 +198,7 @@ public final class DockRepeatClickController {
             perform(action)
             return true
         case .otherMouseDown where event.getIntegerValueField(.mouseEventButtonNumber) == 2:
+            guard resolver.isNearDock(event.location) else { return false }
             pendingMiddleAction = middleAction(at: event.location)
             return pendingMiddleAction != nil
         case .otherMouseUp where event.getIntegerValueField(.mouseEventButtonNumber) == 2:
@@ -215,7 +214,7 @@ public final class DockRepeatClickController {
         }
     }
 
-    private func primaryAction(for target: Target) -> PendingAction? {
+    private func primaryAction(for target: DockItemTarget) -> PendingAction? {
         guard case .application(let pid) = target,
               let application = NSRunningApplication(processIdentifier: pid),
               let bundleIdentifier = application.bundleIdentifier else { return nil }
@@ -234,12 +233,7 @@ public final class DockRepeatClickController {
     }
 
     private func noteUserInteraction(at point: CGPoint) {
-        var element: AXUIElement?
-        var pid: pid_t = 0
-        if AXUIElementCopyElementAtPosition(systemWideElement, Float(point.x), Float(point.y), &element) == .success,
-           let element,
-           AXUIElementGetPid(element, &pid) == .success,
-           pid > 0 {
+        if let pid = resolver.applicationPID(at: point) {
             userInteractionHandler?(pid)
         } else {
             noteFrontmostUserInteraction()
@@ -247,7 +241,7 @@ public final class DockRepeatClickController {
     }
 
     private func middleAction(at point: CGPoint) -> PendingAction? {
-        switch target(at: point) {
+        switch resolver.target(at: point) {
         case .application(let pid):
             return .quit(pid)
         case .proxy(let key):
@@ -278,51 +272,4 @@ public final class DockRepeatClickController {
         }
     }
 
-    private func target(at point: CGPoint) -> Target? {
-        guard let bundleURL = dockApplicationBundleURL(at: point),
-              let bundle = Bundle(url: bundleURL),
-              let bundleIdentifier = bundle.bundleIdentifier else { return nil }
-        if Policy.isProxyBundle(bundleIdentifier),
-           let keyString = bundle.object(forInfoDictionaryKey: "WWWindowKey") as? String,
-           let key = WindowKey(stringValue: keyString) {
-            return .proxy(key)
-        }
-        guard let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
-            .first(where: { $0.bundleURL?.standardizedFileURL == bundleURL.standardizedFileURL }) else {
-            return nil
-        }
-        return .application(application.processIdentifier)
-    }
-
-    private func dockApplicationBundleURL(at point: CGPoint) -> URL? {
-        var element: AXUIElement?
-        guard AXUIElementCopyElementAtPosition(systemWideElement, Float(point.x), Float(point.y), &element) == .success,
-              var current = element else { return nil }
-
-        for _ in 0..<5 {
-            if readString(current, attribute: kAXSubroleAttribute) == kAXApplicationDockItemSubrole,
-               let url = readURL(current) {
-                return url
-            }
-            var parentRef: CFTypeRef?
-            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parentRef) == .success,
-                  let parent = parentRef as! AXUIElement? else { return nil }
-            current = parent
-        }
-        return nil
-    }
-
-    private func readString(_ element: AXUIElement, attribute: String) -> String? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
-        return value as? String
-    }
-
-    private func readURL(_ element: AXUIElement) -> URL? {
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXURLAttribute as CFString, &value) == .success else { return nil }
-        if let url = value as? URL { return url }
-        if let string = value as? String { return URL(string: string) }
-        return nil
-    }
 }

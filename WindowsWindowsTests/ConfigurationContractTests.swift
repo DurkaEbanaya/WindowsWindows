@@ -124,6 +124,8 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertTrue(workspace.behavior.minimizeOnRepeatClick)
         XCTAssertTrue(workspace.behavior.optionTabSwitcherEnabled)
         XCTAssertTrue(workspace.behavior.dockWindowTilesEnabled)
+        XCTAssertFalse(workspace.behavior.dockHoverPreviewsEnabled)
+        XCTAssertEqual(workspace.behavior.dockHoverPreviewDelay, 0.35)
         XCTAssertEqual(workspace.appearance.theme, .system)
         let persisted = try JSONSerialization.jsonObject(with: Data(contentsOf: store.configURL))
         let dictionary = try XCTUnwrap(persisted as? [String: Any])
@@ -367,6 +369,8 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertFalse(behavior.minimizeOnRepeatClick)
         XCTAssertTrue(behavior.optionTabSwitcherEnabled)
         XCTAssertTrue(behavior.dockWindowTilesEnabled)
+        XCTAssertFalse(behavior.dockHoverPreviewsEnabled)
+        XCTAssertEqual(behavior.dockHoverPreviewDelay, 0.35)
     }
 
     func testWindowPresentationModesPersistIndependently() throws {
@@ -390,7 +394,43 @@ final class ConfigurationContractTests: XCTestCase {
         ))
 
         XCTAssertTrue(plan.capturesPreviews)
+        XCTAssertFalse(plan.capturesHoverPreviews)
         XCTAssertFalse(plan.projectsDockTiles)
+    }
+
+    func testHoverPreviewOnlyModeCapturesPreviewsWithoutDockProjection() {
+        let plan = WindowPresentationPlan(behavior: WorkspaceBehaviorConfig(
+            optionTabSwitcherEnabled: false,
+            dockWindowTilesEnabled: false,
+            dockHoverPreviewsEnabled: true
+        ))
+
+        XCTAssertTrue(plan.capturesPreviews)
+        XCTAssertTrue(plan.capturesHoverPreviews)
+        XCTAssertFalse(plan.projectsDockTiles)
+    }
+
+    func testHoverPreviewDiscoveryIgnoresUserScopeWithoutChangingMainScope() {
+        let excludedBundleID = "com.example.excluded"
+        let config = ShelfConfig(
+            scopeMode: .allExceptListed,
+            bundleIdentifiers: [excludedBundleID]
+        )
+        let plan = WindowPresentationPlan(behavior: WorkspaceBehaviorConfig(
+            dockHoverPreviewsEnabled: true
+        ))
+
+        XCTAssertFalse(Policy.admit(bundleIdentifier: excludedBundleID, config: config))
+        XCTAssertTrue(Policy.admit(
+            bundleIdentifier: excludedBundleID,
+            config: plan.discoveryConfig(from: config)
+        ))
+    }
+
+    func testDockHoverPreviewDelayIsBounded() {
+        XCTAssertEqual(WorkspaceBehaviorConfig(dockHoverPreviewDelay: 0).dockHoverPreviewDelay, 0.1)
+        XCTAssertEqual(WorkspaceBehaviorConfig(dockHoverPreviewDelay: 3).dockHoverPreviewDelay, 1.5)
+        XCTAssertEqual(WorkspaceBehaviorConfig(dockHoverPreviewDelay: 0.6).dockHoverPreviewDelay, 0.6)
     }
 
     func testDockPrimaryClickUsesExactWindowOnlyWhenAvailableAndEnabled() {

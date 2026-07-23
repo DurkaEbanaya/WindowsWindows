@@ -26,7 +26,10 @@
 		AA000113 /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110113 /* SettingsWindowController.swift */; };
 		AA000115 /* OptionTabSwitcherController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110115 /* OptionTabSwitcherController.swift */; };
 		AA000116 /* DockRepeatClickController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110116 /* DockRepeatClickController.swift */; };
+		AA000118 /* DockItemResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110118 /* DockItemResolver.swift */; };
+		AA000119 /* DockHoverPreviewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110119 /* DockHoverPreviewController.swift */; };
 		AA000114 /* settings.html in Resources */ = {isa = PBXBuildFile; fileRef = AA110114 /* settings.html */; };
+		AA000117 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AA110117 /* Assets.xcassets */; };
 		AA000100 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA110000 /* main.swift */; };
 		AA000101 /* WindowsWindowsProxy binary in Copy Files */ = {isa = PBXBuildFile; fileRef = AA110100 /* WindowsWindowsProxy */; };
 		AA000200 /* main.swift in Sources (wwctl) */ = {isa = PBXBuildFile; fileRef = AA120000 /* main.swift (wwctl) */; };
@@ -61,7 +64,10 @@
 		AA110113 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		AA110115 /* OptionTabSwitcherController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionTabSwitcherController.swift; sourceTree = "<group>"; };
 		AA110116 /* DockRepeatClickController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockRepeatClickController.swift; sourceTree = "<group>"; };
+		AA110118 /* DockItemResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockItemResolver.swift; sourceTree = "<group>"; };
+		AA110119 /* DockHoverPreviewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockHoverPreviewController.swift; sourceTree = "<group>"; };
 		AA110114 /* settings.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = settings.html; sourceTree = "<group>"; };
+		AA110117 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AA100200 /* WindowsWindows.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WindowsWindows.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA110000 /* main.swift (proxy) */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = main.swift; path = WindowsWindowsProxy/main.swift; sourceTree = "<group>"; };
 		AA110100 /* WindowsWindowsProxy */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = WindowsWindowsProxy; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -155,6 +161,8 @@
 				AA110113 /* SettingsWindowController.swift */,
 				AA110115 /* OptionTabSwitcherController.swift */,
 				AA110116 /* DockRepeatClickController.swift */,
+				AA110118 /* DockItemResolver.swift */,
+				AA110119 /* DockHoverPreviewController.swift */,
 			);
 			path = AppDelegate;
 			sourceTree = "<group>";
@@ -238,6 +246,7 @@
 		AA200020 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				AA110117 /* Assets.xcassets */,
 				AA110114 /* settings.html */,
 			);
 			path = Resources;
@@ -403,6 +412,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA000117 /* Assets.xcassets in Resources */,
 				AA000114 /* settings.html in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -420,6 +430,8 @@
 				AA000113 /* SettingsWindowController.swift in Sources */,
 				AA000115 /* OptionTabSwitcherController.swift in Sources */,
 				AA000116 /* DockRepeatClickController.swift in Sources */,
+				AA000118 /* DockItemResolver.swift in Sources */,
+				AA000119 /* DockHoverPreviewController.swift in Sources */,
 				AA000003 /* ObservedWindow.swift in Sources */,
 				AA000004 /* ApplicationEntry.swift in Sources */,
 				AA000005 /* ShelfConfig.swift in Sources */,
@@ -519,14 +531,14 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				OTHER_SWIFT_FLAGS = "-parse-as-library";
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;
@@ -541,14 +553,14 @@
 				CODE_SIGN_ENTITLEMENTS = WindowsWindows/WindowsWindows.entitlements;
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				INFOPLIST_FILE = WindowsWindows/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				OTHER_SWIFT_FLAGS = "-parse-as-library";
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.windowswindows.app";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 5.0;

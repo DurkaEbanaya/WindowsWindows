@@ -33,12 +33,27 @@ public struct CloseProxySuppressionState: Equatable, Sendable {
 
 public struct WindowPresentationPlan: Equatable, Sendable {
     public let capturesPreviews: Bool
+    public let capturesHoverPreviews: Bool
     public let projectsDockTiles: Bool
 
     public init(behavior: WorkspaceBehaviorConfig) {
-        capturesPreviews = behavior.optionTabSwitcherEnabled || behavior.dockWindowTilesEnabled
+        capturesHoverPreviews = behavior.dockHoverPreviewsEnabled
+        capturesPreviews = behavior.optionTabSwitcherEnabled
+            || behavior.dockWindowTilesEnabled
+            || capturesHoverPreviews
         projectsDockTiles = behavior.dockWindowTilesEnabled
     }
+
+    public func discoveryConfig(from config: ShelfConfig) -> ShelfConfig {
+        guard capturesHoverPreviews else { return config }
+        return ShelfConfig(
+            scopeMode: .allExceptListed,
+            bundleIdentifiers: [],
+            refreshInterval: config.refreshInterval,
+            snapshotInterval: config.snapshotInterval
+        )
+    }
+
 }
 
 /// Periodically reconciles proxy bundles with the set of real windows.
@@ -57,12 +72,17 @@ public actor RefreshLoop {
     private var lastTitles: [WindowKey: String] = [:]
     private var previewImages: [WindowKey: NSImage] = [:]
     private var lastKnownWindows: [WindowKey: ObservedWindow] = [:]
+    private var lastKnownHoverWindows: [WindowKey: ObservedWindow] = [:]
     private var lastCaptureAuthorization: Bool?
     private var refreshInterval: TimeInterval = 2.0
     private var snapshotInterval: TimeInterval = 5.0
     private var lastKnownConfig: ShelfConfig?
     private var lastKnownWorkspace: WorkspaceConfig?
-    private var onWindowsUpdated: (@MainActor @Sendable ([WindowKey: ObservedWindow], [WindowKey: NSImage]) -> Void)?
+    private var onWindowsUpdated: (@MainActor @Sendable (
+        [WindowKey: ObservedWindow],
+        [WindowKey: ObservedWindow],
+        [WindowKey: NSImage]
+    ) -> Void)?
     private var closeSuppressions = CloseProxySuppressionState()
     private var lastDockWindowTilesEnabled: Bool?
 
@@ -104,7 +124,11 @@ public actor RefreshLoop {
     }
 
     public func setOnWindowsUpdated(
-        _ callback: @escaping @MainActor @Sendable ([WindowKey: ObservedWindow], [WindowKey: NSImage]) -> Void
+        _ callback: @escaping @MainActor @Sendable (
+            [WindowKey: ObservedWindow],
+            [WindowKey: ObservedWindow],
+            [WindowKey: NSImage]
+        ) -> Void
     ) {
         onWindowsUpdated = callback
     }
@@ -143,11 +167,23 @@ public actor RefreshLoop {
         refreshInterval = config.refreshInterval
         snapshotInterval = config.snapshotInterval
 
-        let discoverySnapshot = discovery.discover(config: config)
-        let windows = discoverySnapshot.windows
+        let presentation = WindowPresentationPlan(behavior: workspace.behavior)
+        let discoveryConfig = presentation.discoveryConfig(from: config)
+        let discoverySnapshot = discovery.discover(config: discoveryConfig)
+        let hoverWindows = discoverySnapshot.windows
+        let windows = hoverWindows.filter {
+            Policy.admit(bundleIdentifier: $0.bundleIdentifier, config: config)
+        }
+        let filteredSnapshot = WindowDiscoverySnapshot(
+            windows: windows,
+            incompleteApplications: discoverySnapshot.incompleteApplications,
+            unidentifiedApplicationPIDs: discoverySnapshot.unidentifiedApplicationPIDs
+        )
         let windowMap = Dictionary(uniqueKeysWithValues: windows.map { ($0.key, $0) })
         let validKeys = Set(windowMap.keys)
-        reconcileKnownWindows(with: discoverySnapshot)
+        reconcileKnownWindows(with: filteredSnapshot)
+        Self.reconcileWindows(&lastKnownHoverWindows, with: discoverySnapshot)
+        let hoverWindowMap = lastKnownHoverWindows
         do {
             if try workspace.assignNewWindowsToActiveProfile(validKeys) {
                 workspace = try configStore.updateWorkspace { stored in
@@ -161,7 +197,6 @@ public actor RefreshLoop {
             ])
         }
         let activeKeys = workspace.activeWindowKeySet()
-        let presentation = WindowPresentationPlan(behavior: workspace.behavior)
         closeSuppressions.removeObservedKeys(validKeys, now: Date())
         let captureAuthorized = await snapshotter.isCaptureAuthorized
 
@@ -175,7 +210,7 @@ public actor RefreshLoop {
         if let callback = onWindowsUpdated {
             let knownWindows = lastKnownWindows
             let previews = previewImages
-            Task { @MainActor in callback(knownWindows, previews) }
+            Task { @MainActor in callback(knownWindows, hoverWindowMap, previews) }
         }
 
         if !presentation.projectsDockTiles, lastDockWindowTilesEnabled != false {
@@ -188,9 +223,12 @@ public actor RefreshLoop {
             return
         }
 
-        for window in windows where activeKeys.contains(window.key) {
+        let captureWindows = workspace.behavior.dockHoverPreviewsEnabled ? hoverWindows : windows
+        for window in captureWindows
+        where workspace.behavior.dockHoverPreviewsEnabled || activeKeys.contains(window.key) {
             guard !Task.isCancelled else { return }
-            if presentation.projectsDockTiles && closeSuppressions.isSuppressed(key: window.key, now: Date()) {
+            let projectsThisWindow = presentation.projectsDockTiles && activeKeys.contains(window.key)
+            if projectsThisWindow && closeSuppressions.isSuppressed(key: window.key, now: Date()) {
                 DiagnosticJournal.shared.log("proxy", "launch_suppressed_for_close", fields: [
                     "key": window.key.stringValue
                 ])
@@ -221,7 +259,7 @@ public actor RefreshLoop {
                 if snapshot != nil {
                     lastSnapshotTimes[window.key] = Date()
                 }
-                if presentation.projectsDockTiles {
+                if projectsThisWindow {
                     try factory.ensure(window: window, snapshot: snapshot)
                 }
             } catch {
@@ -229,13 +267,15 @@ public actor RefreshLoop {
             }
         }
 
-        let retainedPreviewKeys = validKeys.intersection(activeKeys)
+        let retainedPreviewKeys = workspace.behavior.dockHoverPreviewsEnabled
+            ? Set(hoverWindowMap.keys)
+            : validKeys.intersection(activeKeys)
         previewImages = previewImages.filter { retainedPreviewKeys.contains($0.key) }
 
         if let callback = onWindowsUpdated {
             let knownWindows = lastKnownWindows
             let previews = previewImages
-            Task { @MainActor in callback(knownWindows, previews) }
+            Task { @MainActor in callback(knownWindows, hoverWindowMap, previews) }
         }
 
         guard presentation.projectsDockTiles else { return }
@@ -276,19 +316,26 @@ public actor RefreshLoop {
     }
 
     private func reconcileKnownWindows(with snapshot: WindowDiscoverySnapshot) {
+        Self.reconcileWindows(&lastKnownWindows, with: snapshot)
+    }
+
+    private static func reconcileWindows(
+        _ knownWindows: inout [WindowKey: ObservedWindow],
+        with snapshot: WindowDiscoverySnapshot
+    ) {
         let currentKeys = Set(snapshot.windows.map(\.key))
-        let removedKeys = Set(lastKnownWindows.keys).subtracting(currentKeys).filter {
-            guard let window = lastKnownWindows[$0] else { return true }
+        let removedKeys = Set(knownWindows.keys).subtracting(currentKeys).filter {
+            guard let window = knownWindows[$0] else { return true }
             return snapshot.isAbsenceAuthoritative(
                 for: window.key,
                 persistedProcessIdentity: window.processIdentity
             )
         }
         for key in removedKeys {
-            lastKnownWindows.removeValue(forKey: key)
+            knownWindows.removeValue(forKey: key)
         }
         for window in snapshot.windows {
-            lastKnownWindows[window.key] = window
+            knownWindows[window.key] = window
         }
     }
 

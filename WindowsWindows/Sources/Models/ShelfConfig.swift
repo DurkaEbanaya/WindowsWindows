@@ -255,18 +255,27 @@ public enum WorkspaceThemePreference: String, Codable, Sendable {
 }
 
 public struct WorkspaceBehaviorConfig: Codable, Equatable, Sendable {
+    public static let defaultDockHoverPreviewDelay: TimeInterval = 0.35
+    public static let dockHoverPreviewDelayRange: ClosedRange<TimeInterval> = 0.1...1.5
+
     public var minimizeOnRepeatClick: Bool
     public var optionTabSwitcherEnabled: Bool
     public var dockWindowTilesEnabled: Bool
+    public var dockHoverPreviewsEnabled: Bool
+    public var dockHoverPreviewDelay: TimeInterval
 
     public init(
         minimizeOnRepeatClick: Bool = true,
         optionTabSwitcherEnabled: Bool = true,
-        dockWindowTilesEnabled: Bool = true
+        dockWindowTilesEnabled: Bool = true,
+        dockHoverPreviewsEnabled: Bool = false,
+        dockHoverPreviewDelay: TimeInterval = Self.defaultDockHoverPreviewDelay
     ) {
         self.minimizeOnRepeatClick = minimizeOnRepeatClick
         self.optionTabSwitcherEnabled = optionTabSwitcherEnabled
         self.dockWindowTilesEnabled = dockWindowTilesEnabled
+        self.dockHoverPreviewsEnabled = dockHoverPreviewsEnabled
+        self.dockHoverPreviewDelay = Self.normalizedDockHoverPreviewDelay(dockHoverPreviewDelay)
     }
 
     public static let `default` = WorkspaceBehaviorConfig()
@@ -275,6 +284,8 @@ public struct WorkspaceBehaviorConfig: Codable, Equatable, Sendable {
         case minimizeOnRepeatClick
         case optionTabSwitcherEnabled
         case dockWindowTilesEnabled
+        case dockHoverPreviewsEnabled
+        case dockHoverPreviewDelay
     }
 
     public init(from decoder: Decoder) throws {
@@ -282,6 +293,16 @@ public struct WorkspaceBehaviorConfig: Codable, Equatable, Sendable {
         minimizeOnRepeatClick = try values.decodeIfPresent(Bool.self, forKey: .minimizeOnRepeatClick) ?? true
         optionTabSwitcherEnabled = try values.decodeIfPresent(Bool.self, forKey: .optionTabSwitcherEnabled) ?? true
         dockWindowTilesEnabled = try values.decodeIfPresent(Bool.self, forKey: .dockWindowTilesEnabled) ?? true
+        dockHoverPreviewsEnabled = try values.decodeIfPresent(Bool.self, forKey: .dockHoverPreviewsEnabled) ?? false
+        dockHoverPreviewDelay = Self.normalizedDockHoverPreviewDelay(
+            try values.decodeIfPresent(TimeInterval.self, forKey: .dockHoverPreviewDelay)
+                ?? Self.defaultDockHoverPreviewDelay
+        )
+    }
+
+    private static func normalizedDockHoverPreviewDelay(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite else { return defaultDockHoverPreviewDelay }
+        return min(max(value, dockHoverPreviewDelayRange.lowerBound), dockHoverPreviewDelayRange.upperBound)
     }
 }
 

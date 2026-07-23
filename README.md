@@ -30,6 +30,7 @@ WindowsWindows turns individual windows from other applications into separate Do
 - Optional repeat-click minimization for the already focused window.
 - Windows-style exact-window toggle for ordinary application icons in the macOS Dock, using each app's most recently focused window.
 - Middle-click an ordinary Dock icon to quit its app, or a WindowsWindows proxy tile to close its exact window.
+- Optional square acrylic window previews when hovering over an application or proxy icon in the Dock.
 - Explicit **Close Window** action for a proxy tile.
 - Application exclusions with immediate persistence.
 - Global active-workspace traversal shortcuts: `Control+Command+←/→` by default.
