@@ -393,30 +393,82 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertFalse(plan.projectsDockTiles)
     }
 
-    func testDockRepeatClickMinimizesOnlyTheAlreadyFrontmostNonProxyApplication() {
+    func testDockPrimaryClickUsesExactWindowOnlyWhenAvailableAndEnabled() {
         XCTAssertEqual(
-            DockRepeatClickDecision.decide(
-                clickedApplicationPID: 42,
-                frontmostApplicationPID: 42,
+            DockPrimaryClickDecision.decide(
+                isEnabled: true,
+                hasExactWindow: true,
                 isProxyApplication: false
             ),
-            .minimize
+            .toggleExactWindow
         )
         XCTAssertEqual(
-            DockRepeatClickDecision.decide(
-                clickedApplicationPID: 42,
-                frontmostApplicationPID: 21,
+            DockPrimaryClickDecision.decide(
+                isEnabled: true,
+                hasExactWindow: false,
                 isProxyApplication: false
             ),
-            .ignore
+            .useSystemBehavior
         )
         XCTAssertEqual(
-            DockRepeatClickDecision.decide(
-                clickedApplicationPID: 42,
-                frontmostApplicationPID: 42,
+            DockPrimaryClickDecision.decide(
+                isEnabled: true,
+                hasExactWindow: true,
                 isProxyApplication: true
             ),
-            .ignore
+            .useSystemBehavior
         )
+        XCTAssertEqual(
+            DockPrimaryClickDecision.decide(
+                isEnabled: false,
+                hasExactWindow: true,
+                isProxyApplication: false
+            ),
+            .useSystemBehavior
+        )
+    }
+
+    func testDockWindowPreferenceIgnoresAutomaticFocusAfterMinimizeUntilUserInput() {
+        let first = WindowKey(appPID: 42, windowNumber: 1)
+        let second = WindowKey(appPID: 42, windowNumber: 2)
+        let now = Date(timeIntervalSince1970: 1_000)
+        var preferences = DockWindowPreferenceState()
+
+        XCTAssertTrue(preferences.observeFocusedWindow(second, now: now))
+        preferences.pin(second)
+        XCTAssertFalse(preferences.observeFocusedWindow(first, now: now.addingTimeInterval(0.1)))
+        XCTAssertEqual(preferences.targetKey(for: 42), second)
+
+        preferences.noteUserInteraction(with: 42, now: now.addingTimeInterval(1))
+        XCTAssertTrue(preferences.observeFocusedWindow(first, now: now.addingTimeInterval(1.1)))
+        XCTAssertEqual(preferences.targetKey(for: 42), first)
+    }
+
+    func testMinimizedWindowCanBePinnedAsTheNextDockTarget() {
+        let first = WindowKey(appPID: 42, windowNumber: 1)
+        let minimized = WindowKey(appPID: 42, windowNumber: 2)
+        let now = Date(timeIntervalSince1970: 1_000)
+        var preferences = DockWindowPreferenceState()
+
+        XCTAssertTrue(preferences.observeFocusedWindow(first, now: now))
+        preferences.noteMinimized(minimized)
+
+        XCTAssertEqual(preferences.targetKey(for: 42), minimized)
+    }
+
+    func testMultipleMinimizedWindowsAreRestoredInMinimizeOrder() {
+        let first = WindowKey(appPID: 42, windowNumber: 1)
+        let second = WindowKey(appPID: 42, windowNumber: 2)
+        var preferences = DockWindowPreferenceState()
+
+        preferences.noteMinimized(first)
+        preferences.noteMinimized(second)
+        XCTAssertEqual(preferences.targetKey(for: 42), first)
+
+        preferences.noteRestored(first)
+        XCTAssertEqual(preferences.targetKey(for: 42), second)
+
+        preferences.noteRestored(second)
+        XCTAssertEqual(preferences.targetKey(for: 42), second)
     }
 }

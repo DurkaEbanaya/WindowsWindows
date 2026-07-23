@@ -64,7 +64,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let optionTabSwitcher = OptionTabSwitcherController()
     private let dockRepeatClickController = DockRepeatClickController()
     private var optionTabSwitcherEnabled = false
-    private var dockRepeatClickEnabled = false
     private let updateCheckService = UpdateCheckService()
     private var mainInstanceLock: MainInstanceLock?
     private let mainSessionToken = UUID().uuidString
@@ -74,6 +73,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // Обновляется RefreshLoop.tick(). IPC-handler ищет здесь по windowKey.
     private var knownWindows: [WindowKey: ObservedWindow] = [:]
     private var knownPreviews: [WindowKey: NSImage] = [:]
+    private var dockWindowPreferences = DockWindowPreferenceState()
     private let knownWindowsLock = NSLock()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -128,9 +128,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.workspaceDidChange(workspace)
         }
         focusTracker = WindowFocusTracker()
-        focusTracker.start { [weak self] key in
-            self?.optionTabSwitcher.noteFocusedWindow(key)
-        }
+        focusTracker.start(
+            onFocusedWindowChanged: { [weak self] key in
+                self?.optionTabSwitcher.noteFocusedWindow(key)
+                _ = self?.dockWindowPreferences.observeFocusedWindow(key, now: Date())
+            },
+            onWindowMinimized: { [weak self] key in
+                self?.dockWindowPreferences.noteMinimized(key)
+            },
+            onWindowRestored: { [weak self] key in
+                self?.dockWindowPreferences.noteRestored(key)
+            }
+        )
         refreshLoop = RefreshLoop(
             discovery: discovery,
             factory: factory,
@@ -171,6 +180,27 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         requestScreenCapturePermissionIfNeeded()
         applyWorkspaceServicesFromDisk()
+        dockRepeatClickController.start(
+            canToggle: { [weak self] application in
+                self?.dockTargetWindow(for: application) != nil
+            },
+            toggle: { [weak self] application in
+                guard let self, let window = self.dockTargetWindow(for: application) else { return }
+                let wasFocused = self.focusTracker.currentFocusedWindowKey() == window.key
+                self.dockWindowPreferences.pin(window.key)
+                self.windowController.toggle(window: window, wasFocusedBeforeProxy: wasFocused)
+                DiagnosticJournal.shared.log("dock_click", "exact_window_toggle", fields: [
+                    "key": window.key.stringValue,
+                    "wasFocused": wasFocused
+                ])
+            },
+            closeProxy: { [weak self] key in
+                self?.handleProxyCloseRequest(key: key)
+            },
+            userInteraction: { [weak self] pid in
+                self?.dockWindowPreferences.noteUserInteraction(with: pid, now: Date())
+            }
+        )
     }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -259,7 +289,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applyWorkspaceServices(_ workspace: WorkspaceConfig) {
         windowController.minimizeOnRepeatClick = workspace.behavior.minimizeOnRepeatClick
-        applyDockRepeatClick(enabled: workspace.behavior.minimizeOnRepeatClick)
+        dockRepeatClickController.isPrimaryClickEnabled = workspace.behavior.minimizeOnRepeatClick
         applyOptionTabSwitcher(enabled: workspace.behavior.optionTabSwitcherEnabled)
         hotKeyController.apply(config: workspace.hotKeys) { [weak self] direction in
             self?.traverseActiveProfile(direction)
@@ -267,18 +297,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         LoginItemService.apply(enabled: workspace.loginItem.isEnabled)
         Task { [updateCheckService] in
             await updateCheckService.check(config: workspace.updates)
-        }
-    }
-
-    private func applyDockRepeatClick(enabled: Bool) {
-        guard dockRepeatClickEnabled != enabled else { return }
-        dockRepeatClickEnabled = enabled
-        if enabled {
-            dockRepeatClickController.start { [weak self] application in
-                _ = self?.windowController.minimizeFocusedWindow(of: application)
-            }
-        } else {
-            dockRepeatClickController.stop()
         }
     }
 
@@ -290,7 +308,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 windows: { [weak self] in self?.activeProfileWindows() ?? [] },
                 focusedKey: { [weak self] in self?.focusTracker.currentFocusedWindowKey() },
                 preview: { [weak self] key in self?.previewImage(for: key) },
-                activate: { [weak self] window in self?.windowController.raise(window: window) }
+                activate: { [weak self] window in
+                    self?.dockWindowPreferences.pin(window.key)
+                    self?.windowController.raise(window: window)
+                }
             )
         } else {
             optionTabSwitcher.stop()
@@ -310,6 +331,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let focused = focusTracker.currentFocusedWindowKey()
             let targetKey = nextKey(in: availableKeys, from: focused, direction: direction)
             guard let window = windows[targetKey] else { return }
+            dockWindowPreferences.pin(window.key)
             windowController.raise(window: window)
             DiagnosticJournal.shared.log("hotkey", "profile_traversal", fields: [
                 "direction": String(describing: direction),
@@ -339,6 +361,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         return preview ?? factory.previewImage(for: key)
     }
 
+    private func dockTargetWindow(for application: NSRunningApplication) -> ObservedWindow? {
+        guard let key = dockWindowPreferences.targetKey(for: application.processIdentifier) else { return nil }
+        knownWindowsLock.lock()
+        let window = knownWindows[key]
+        knownWindowsLock.unlock()
+        if window == nil {
+            dockWindowPreferences.invalidateTarget(for: application.processIdentifier)
+        }
+        return window
+    }
+
     private func nextKey(
         in keys: [WindowKey],
         from focused: WindowKey?,
@@ -358,6 +391,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Обработка клика по прокси в Dock.
     /// Прокси прислал windowKey → находим окно в knownWindows → toggle.
     private func handleProxyActivation(key: WindowKey) {
+        dockWindowPreferences.pin(key)
         let wasFocusedBeforeProxy = focusTracker.wasFocusedImmediatelyBeforeProxy(key)
         DiagnosticJournal.shared.log("ipc", "proxy_clicked", fields: [
             "key": key.stringValue,

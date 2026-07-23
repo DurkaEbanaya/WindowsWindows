@@ -12,14 +12,22 @@ public final class WindowFocusTracker {
     private var axObserver: AXObserver?
     private var observedPID: pid_t?
     private var onFocusedWindowChanged: ((WindowKey) -> Void)?
+    private var onWindowMinimized: ((WindowKey) -> Void)?
+    private var onWindowRestored: ((WindowKey) -> Void)?
 
     public init(resolver: AXWindowIDResolver = .shared) {
         self.resolver = resolver
     }
 
-    public func start(onFocusedWindowChanged: ((WindowKey) -> Void)? = nil) {
+    public func start(
+        onFocusedWindowChanged: ((WindowKey) -> Void)? = nil,
+        onWindowMinimized: ((WindowKey) -> Void)? = nil,
+        onWindowRestored: ((WindowKey) -> Void)? = nil
+    ) {
         guard !isStarted else { return }
         self.onFocusedWindowChanged = onFocusedWindowChanged
+        self.onWindowMinimized = onWindowMinimized
+        self.onWindowRestored = onWindowRestored
         isStarted = true
         let center = NSWorkspace.shared.notificationCenter
         center.addObserver(
@@ -44,6 +52,8 @@ public final class WindowFocusTracker {
         )
         removeAXObserver()
         onFocusedWindowChanged = nil
+        onWindowMinimized = nil
+        onWindowRestored = nil
     }
 
     public func wasFocusedImmediatelyBeforeProxy(_ key: WindowKey) -> Bool {
@@ -84,7 +94,7 @@ public final class WindowFocusTracker {
         let appElement = AXUIElementCreateApplication(pid)
         var newObserver: AXObserver?
         observedPID = pid
-        let createResult = AXObserverCreate(pid, { _, element, _, context in
+        let createResult = AXObserverCreate(pid, { _, element, notification, context in
             guard let context else { return }
             var eventPID: pid_t = 0
             let tracker = Unmanaged<WindowFocusTracker>.fromOpaque(context).takeUnretainedValue()
@@ -93,7 +103,13 @@ public final class WindowFocusTracker {
                     tracker.focusedWindow = nil
                     return
                 }
-                tracker.captureFocusedWindow(pid: eventPID)
+                if notification as String == kAXWindowMiniaturizedNotification {
+                    tracker.captureWindowStateChange(element, pid: eventPID, isMinimized: true)
+                } else if notification as String == kAXWindowDeminiaturizedNotification {
+                    tracker.captureWindowStateChange(element, pid: eventPID, isMinimized: false)
+                } else {
+                    tracker.captureFocusedWindow(pid: eventPID)
+                }
             }
         }, &newObserver)
 
@@ -106,6 +122,18 @@ public final class WindowFocusTracker {
                 context
             )
             if addResult == .success {
+                _ = AXObserverAddNotification(
+                    newObserver,
+                    appElement,
+                    kAXWindowMiniaturizedNotification as CFString,
+                    context
+                )
+                _ = AXObserverAddNotification(
+                    newObserver,
+                    appElement,
+                    kAXWindowDeminiaturizedNotification as CFString,
+                    context
+                )
                 axObserver = newObserver
                 CFRunLoopAddSource(
                     CFRunLoopGetMain(),
@@ -149,6 +177,20 @@ public final class WindowFocusTracker {
             "pid": pid,
             "key": "",
             "axError": result.rawValue
+        ])
+    }
+
+    private func captureWindowStateChange(_ window: AXUIElement, pid: pid_t, isMinimized: Bool) {
+        guard observedPID == pid, let windowID = resolver.windowID(for: window) else { return }
+        let key = WindowKey(appPID: pid, windowNumber: windowID)
+        if isMinimized {
+            onWindowMinimized?(key)
+        } else {
+            onWindowRestored?(key)
+        }
+        DiagnosticJournal.shared.log("focus", isMinimized ? "window_minimized_observed" : "window_restored_observed", fields: [
+            "pid": pid,
+            "key": key.stringValue
         ])
     }
 
