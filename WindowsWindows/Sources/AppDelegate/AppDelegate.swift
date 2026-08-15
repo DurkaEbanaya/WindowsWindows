@@ -396,18 +396,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func dockHoverWindows(for target: DockItemTarget) -> [ObservedWindow] {
-        switch target {
-        case .application(let pid):
-            knownWindowsLock.lock()
-            let windows = knownHoverWindows.values.filter { $0.appPID == pid }
-            knownWindowsLock.unlock()
-            return windows.sorted { $0.windowNumber < $1.windowNumber }
-        case .proxy(let key):
-            knownWindowsLock.lock()
-            let window = knownHoverWindows[key]
-            knownWindowsLock.unlock()
-            return window.map { [$0] } ?? []
-        }
+        knownWindowsLock.lock()
+        let windows = knownHoverWindows
+        knownWindowsLock.unlock()
+        return DockHoverPreviewSelection.windows(for: target, in: windows)
     }
 
     private func nextKey(

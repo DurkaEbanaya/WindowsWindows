@@ -1,6 +1,22 @@
 import Cocoa
 import CoreGraphics
 
+public enum DockHoverPreviewSelection {
+    public static func windows(
+        for target: DockItemTarget,
+        in knownWindows: [WindowKey: ObservedWindow]
+    ) -> [ObservedWindow] {
+        switch target {
+        case .application(let pid):
+            return knownWindows.values
+                .filter { $0.appPID == pid }
+                .sorted { $0.windowNumber < $1.windowNumber }
+        case .proxy(let key):
+            return knownWindows[key].map { [$0] } ?? []
+        }
+    }
+}
+
 @MainActor
 public final class DockHoverPreviewController {
     private struct Item {

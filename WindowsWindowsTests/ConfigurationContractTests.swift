@@ -435,6 +435,109 @@ final class ConfigurationContractTests: XCTestCase {
         XCTAssertEqual(WorkspaceBehaviorConfig(dockHoverPreviewDelay: 0.6).dockHoverPreviewDelay, 0.6)
     }
 
+    func testDockHoverPreviewIncludesMinimizedWindows() throws {
+        let processIdentity = try XCTUnwrap(ProcessIdentity(
+            processIdentifier: 42,
+            startTimeSeconds: 1,
+            startTimeMicroseconds: 0
+        ))
+        let windows = [
+            ObservedWindow(
+                appPID: 42,
+                processIdentity: processIdentity,
+                windowNumber: 2,
+                bundleIdentifier: "com.example.app",
+                appName: "Example",
+                title: "Minimized",
+                frame: .zero,
+                isMinimized: true
+            ),
+            ObservedWindow(
+                appPID: 42,
+                processIdentity: processIdentity,
+                windowNumber: 1,
+                bundleIdentifier: "com.example.app",
+                appName: "Example",
+                title: "Visible",
+                frame: .zero,
+                isMinimized: false
+            ),
+        ]
+        let knownWindows = Dictionary(uniqueKeysWithValues: windows.map { ($0.key, $0) })
+
+        XCTAssertEqual(
+            DockHoverPreviewSelection.windows(for: .application(42), in: knownWindows).map(\.key),
+            [windows[1].key, windows[0].key]
+        )
+        XCTAssertEqual(
+            DockHoverPreviewSelection.windows(for: .proxy(windows[0].key), in: knownWindows).map(\.key),
+            [windows[0].key]
+        )
+    }
+
+    func testDiscoveryRetainsMissingWindowWhileItsExactAXIdentityIsLive() throws {
+        let processIdentity = try XCTUnwrap(ProcessIdentity.live(processIdentifier: getpid()))
+        let replaced = ObservedWindow(
+            appPID: getpid(),
+            processIdentity: processIdentity,
+            windowNumber: 2,
+            bundleIdentifier: "com.example.app",
+            appName: "Example",
+            title: "Replaced",
+            frame: .zero,
+            isMinimized: false
+        )
+        let closed = ObservedWindow(
+            appPID: getpid(),
+            processIdentity: processIdentity,
+            windowNumber: 3,
+            bundleIdentifier: "com.example.app",
+            appName: "Example",
+            title: "Closed",
+            frame: .zero,
+            isMinimized: false
+        )
+        let snapshot = WindowDiscoverySnapshot(windows: [], incompleteApplications: [])
+
+        let reconciled = WindowDiscovery().retainingMissingLiveWindows(
+            in: snapshot,
+            from: [replaced.key: replaced, closed.key: closed],
+            isCurrentWindow: { $0.key == replaced.key },
+            currentMinimizedState: { $0.key == replaced.key }
+        )
+
+        XCTAssertEqual(reconciled.windows.map(\.key), [replaced.key])
+        XCTAssertTrue(try XCTUnwrap(reconciled.windows.first).isMinimized)
+    }
+
+    func testPreviewCapturePreservesLastFrameUntilWindowIsVisibleAgain() throws {
+        let processIdentity = try XCTUnwrap(ProcessIdentity(
+            processIdentifier: 42,
+            startTimeSeconds: 1,
+            startTimeMicroseconds: 0
+        ))
+        var window = ObservedWindow(
+            appPID: 42,
+            processIdentity: processIdentity,
+            windowNumber: 2,
+            bundleIdentifier: "com.example.app",
+            appName: "Example",
+            title: "Window",
+            frame: .zero,
+            isMinimized: false
+        )
+        let plan = WindowPresentationPlan(behavior: WorkspaceBehaviorConfig(dockHoverPreviewsEnabled: true))
+
+        XCTAssertTrue(plan.shouldCapturePreview(for: window, directlyObservedKeys: [window.key]))
+        XCTAssertFalse(plan.shouldCapturePreview(for: window, directlyObservedKeys: []))
+
+        window.isMinimized = true
+        XCTAssertFalse(plan.shouldCapturePreview(for: window, directlyObservedKeys: [window.key]))
+
+        window.isMinimized = false
+        XCTAssertTrue(plan.shouldCapturePreview(for: window, directlyObservedKeys: [window.key]))
+    }
+
     func testDockPrimaryClickUsesExactWindowOnlyWhenAvailableAndEnabled() {
         XCTAssertEqual(
             DockPrimaryClickDecision.decide(

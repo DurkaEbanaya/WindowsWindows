@@ -53,6 +53,13 @@ public struct WindowPresentationPlan: Equatable, Sendable {
         )
     }
 
+    public func shouldCapturePreview(
+        for window: ObservedWindow,
+        directlyObservedKeys: Set<WindowKey>
+    ) -> Bool {
+        directlyObservedKeys.contains(window.key) && !window.isMinimized
+    }
+
 }
 
 /// Periodically reconciles proxy bundles with the set of real windows.
@@ -170,7 +177,12 @@ public actor RefreshLoop {
 
         let presentation = WindowPresentationPlan(behavior: workspace.behavior)
         let discoveryConfig = presentation.discoveryConfig(from: config)
-        let discoverySnapshot = discovery.discover(config: discoveryConfig)
+        let discoveredSnapshot = discovery.discover(config: discoveryConfig)
+        let directlyObservedKeys = Set(discoveredSnapshot.windows.map(\.key))
+        let discoverySnapshot = discovery.retainingMissingLiveWindows(
+            in: discoveredSnapshot,
+            from: lastKnownHoverWindows
+        )
         let hoverWindows = discoverySnapshot.windows
         let windows = hoverWindows
         let dockWindowKeys = Set(windows.compactMap { window in
@@ -241,7 +253,12 @@ public actor RefreshLoop {
                 continue
             }
             do {
-                let shouldSnapshot = captureAuthorized && shouldRefreshSnapshot(for: window)
+                let shouldSnapshot = captureAuthorized
+                    && presentation.shouldCapturePreview(
+                        for: window,
+                        directlyObservedKeys: directlyObservedKeys
+                    )
+                    && shouldRefreshSnapshot(for: window)
                 let snapshot: NSImage?
                 if shouldSnapshot {
                     do {

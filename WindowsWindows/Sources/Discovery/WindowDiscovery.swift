@@ -152,19 +152,32 @@ public final class WindowDiscovery: @unchecked Sendable {
                 continue
             }
 
+            var childrenValue: CFTypeRef?
+            let childrenResult = AXUIElementCopyAttributeValue(
+                appElement,
+                kAXChildrenAttribute as CFString,
+                &childrenValue
+            )
+            let childElements = childrenResult == .success
+                ? (childrenValue as? [AXUIElement] ?? [])
+                : []
+            let candidates = axWindows.map { ($0, true) } + childElements.map { ($0, false) }
+
             var applicationWindows: [WindowKey: ObservedWindow] = [:]
-            for axWindow in axWindows {
+            for (axWindow, isPrimaryCandidate) in candidates {
                 switch classifyWindow(axWindow) {
                 case .userWindow:
                     break
                 case .ignored:
                     continue
                 case .invalid(let role, let axError):
+                    guard isPrimaryCandidate else { continue }
                     incompleteApplications.insert(processIdentity)
                     currentFailureState[pid, default: []].insert("invalid-element:\(role):\(axError)")
                     continue
                 }
                 guard let windowID = resolver.windowID(for: axWindow) else {
+                    guard isPrimaryCandidate else { continue }
                     incompleteApplications.insert(processIdentity)
                     currentFailureState[pid, default: []].insert("window-id")
                     continue
@@ -192,6 +205,7 @@ public final class WindowDiscovery: @unchecked Sendable {
                     axWindow: axWindow
                 )
                 guard applicationWindows[observed.key] == nil else {
+                    guard isPrimaryCandidate else { continue }
                     incompleteApplications.insert(processIdentity)
                     currentFailureState[pid, default: []].insert("duplicate-key:\(observed.key.stringValue)")
                     continue
@@ -244,6 +258,41 @@ public final class WindowDiscovery: @unchecked Sendable {
             windows: Array(windowsByKey.values),
             incompleteApplications: incompleteApplications,
             unidentifiedApplicationPIDs: unidentifiedApplicationPIDs
+        )
+    }
+
+    func retainingMissingLiveWindows(
+        in snapshot: WindowDiscoverySnapshot,
+        from knownWindows: [WindowKey: ObservedWindow],
+        isCurrentWindow: ((ObservedWindow) -> Bool)? = nil,
+        currentMinimizedState: ((ObservedWindow) -> Bool?)? = nil
+    ) -> WindowDiscoverySnapshot {
+        let observedKeys = Set(snapshot.windows.map(\.key))
+        let isCurrent = isCurrentWindow ?? { [resolver] window in
+            guard let axWindow = window.axWindow else { return false }
+            return resolver.windowID(for: axWindow) == window.windowNumber
+        }
+        let readState = currentMinimizedState ?? { [self] window in
+            guard let axWindow = window.axWindow else { return nil }
+            return readBool(axWindow, kAXMinimizedAttribute)
+        }
+        let retained = knownWindows.values.compactMap { window -> ObservedWindow? in
+            guard !observedKeys.contains(window.key),
+                  window.processIdentity.isLiveProcess,
+                  isCurrent(window) else {
+                return nil
+            }
+            var retainedWindow = window
+            if let isMinimized = readState(window) {
+                retainedWindow.isMinimized = isMinimized
+            }
+            return retainedWindow
+        }
+        guard !retained.isEmpty else { return snapshot }
+        return WindowDiscoverySnapshot(
+            windows: snapshot.windows + retained,
+            incompleteApplications: snapshot.incompleteApplications,
+            unidentifiedApplicationPIDs: snapshot.unidentifiedApplicationPIDs
         )
     }
 
